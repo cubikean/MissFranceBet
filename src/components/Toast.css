@@ -1,0 +1,25 @@
+.toast-region {
+  position: fixed;
+  inset: auto var(--space-4) calc(var(--tabbar-height) + var(--safe-bottom) + var(--space-4));
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.toast {
+  max-width: 28rem;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-pill);
+  background: var(--color-echarpe);
+  color: var(--color-on-dark);
+  font-weight: var(--weight-semibold);
+  animation: toast-in var(--duration-base) var(--ease-out);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
