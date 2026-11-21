@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { NavLink, Outlet } from 'react-router'
 import { useIsSuperAdmin } from '../lib'
+import { InstallBanner } from './InstallBanner'
 import './AppShell.css'
 
 const icon = (path: ReactNode) => (
@@ -67,6 +68,7 @@ export function AppShell() {
   return (
     <div className="shell">
       <main className="shell__main" id="contenu">
+        <InstallBanner />
         <Outlet />
       </main>
       <nav className="tabbar" aria-label="Navigation principale">
