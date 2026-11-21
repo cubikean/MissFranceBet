@@ -148,17 +148,18 @@ service cloud.firestore {
 
       match /members/{uid} {
         // Un membre peut voir les autres membres (et qui a déjà pronostiqué).
-        // Le champ code n'est donc visible que de gens qui l'ont eux-mêmes saisi.
+        // Aucun code n'y est stocké.
         allow get: if isSelf(uid) || isMember(e) || isAdmin();
         allow list: if isMember(e) || isAdmin();
 
-        // Rejoindre = prouver qu'on connaît le code (comparé au secret via get()).
+        // Rejoindre = prouver qu'on connaît le code : joinProofs/{uid} est écrit dans le
+        // même batch et comparé au secret.
         allow create: if isSelf(uid)
-          && exactKeys(request.resource.data, ['joinedAt', 'code', 'hasPicked'])
+          && exactKeys(request.resource.data, ['joinedAt', 'hasPicked'])
           && request.resource.data.joinedAt == request.time
           && request.resource.data.hasPicked == false
-          && request.resource.data.code is string
-          && request.resource.data.code == get(/databases/$(database)/documents/editionSecrets/$(e)).data.code;
+          && getAfter(/databases/$(database)/documents/editions/$(e)/joinProofs/$(uid)).data.code
+             == get(/databases/$(database)/documents/editionSecrets/$(e)).data.code;
 
         // Seul changement possible : hasPicked passe à true, dans le batch d'un prono.
         allow update: if isSelf(uid)
@@ -168,6 +169,17 @@ service cloud.firestore {
           && existsAfter(/databases/$(database)/documents/editions/$(e)/picks/$(uid));
 
         allow delete: if isAdmin();
+      }
+
+      // Preuve temporaire du code, écrite avec l'adhésion puis supprimée aussitôt par le client.
+      // Illisible par tous, auteur compris : le code n'est jamais renvoyé au client.
+      match /joinProofs/{uid} {
+        allow read: if false;
+        allow create, update: if isSelf(uid)
+          && exactKeys(request.resource.data, ['code'])
+          && request.resource.data.code is string
+          && request.resource.data.code.size() <= 64;
+        allow delete: if isSelf(uid) || isAdmin();
       }
 
       match /candidates/{candidateId} {

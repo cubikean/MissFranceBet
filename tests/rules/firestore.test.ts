@@ -45,6 +45,14 @@ async function pick(db: Firestore, uid: string, candidateId: string, n: number) 
   return b.commit()
 }
 
+/** Rejoint comme le fait joinEdition : preuve du code + adhésion dans le même batch. */
+async function joinBatch(db: Firestore, uid: string, code: string, extra: Record<string, unknown> = {}) {
+  const b = writeBatch(db)
+  b.set(doc(db, 'editions', E, 'joinProofs', uid), { code })
+  b.set(doc(db, 'editions', E, 'members', uid), { joinedAt: serverTimestamp(), hasPicked: false, ...extra })
+  return b.commit()
+}
+
 async function seed(status: 'open' | 'closed' | 'finished' = 'open') {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore() as unknown as Firestore
@@ -60,7 +68,7 @@ async function seed(status: 'open' | 'closed' | 'finished' = 'open') {
       await setDoc(doc(db, 'editions', E, 'candidates', id), { id, region: id, order: 0 })
     }
     for (const uid of ['alice', 'bob']) {
-      await setDoc(doc(db, 'editions', E, 'members', uid), { joinedAt: Timestamp.now(), code: CODE, hasPicked: false })
+      await setDoc(doc(db, 'editions', E, 'members', uid), { joinedAt: Timestamp.now(), hasPicked: false })
     }
   })
 }
@@ -205,8 +213,7 @@ describe('pronos', () => {
 })
 
 describe('code de soirée', () => {
-  const join = (uid: string, code: string) =>
-    setDoc(doc(dbAs(uid), 'editions', E, 'members', uid), { joinedAt: serverTimestamp(), code, hasPicked: false })
+  const join = (uid: string, code: string) => joinBatch(dbAs(uid), uid, code)
 
   it('accepte le bon code', async () => {
     await assertSucceeds(join('carol', CODE))
@@ -217,8 +224,37 @@ describe('code de soirée', () => {
   })
 
   it('refuse de rejoindre à la place d’un autre', async () => {
+    await assertFails(joinBatch(dbAs('carol'), 'dave', CODE))
+  })
+
+  it('refuse de rejoindre sans preuve du code', async () => {
     await assertFails(
-      setDoc(doc(dbAs('carol'), 'editions', E, 'members', 'dave'), { joinedAt: serverTimestamp(), code: CODE, hasPicked: false }),
+      setDoc(doc(dbAs('carol'), 'editions', E, 'members', 'carol'), { joinedAt: serverTimestamp(), hasPicked: false }),
+    )
+  })
+
+  it('refuse de stocker le code dans l’adhésion', async () => {
+    await assertFails(joinBatch(dbAs('carol'), 'carol', CODE, { code: CODE }))
+  })
+
+  it('rend la preuve illisible, même pour son auteur et l’admin, puis la laisse supprimer', async () => {
+    await assertSucceeds(join('carol', CODE))
+    const proof = (uid: string) => doc(dbAs(uid), 'editions', E, 'joinProofs', 'carol')
+    await assertFails(getDoc(proof('carol')))
+    await assertFails(getDoc(proof('alice')))
+    await assertFails(getDoc(proof('admin')))
+    await assertFails(getDocs(collection(dbAs('carol'), 'editions', E, 'joinProofs')))
+    await assertFails(deleteDoc(proof('alice')))
+    await assertSucceeds(deleteDoc(proof('carol')))
+  })
+
+  it('refuse une preuve écrite pour quelqu’un d’autre', async () => {
+    await assertFails(setDoc(doc(dbAs('carol'), 'editions', E, 'joinProofs', 'dave'), { code: CODE }))
+  })
+
+  it('ne laisse pas un membre ajouter un code à son adhésion', async () => {
+    await assertFails(
+      updateDoc(doc(dbAs('alice'), 'editions', E, 'members', 'alice'), { code: CODE }),
     )
   })
 
@@ -238,9 +274,7 @@ describe('membres et hasPicked', () => {
   const member = (uid: string) => doc(dbAs(uid), 'editions', E, 'members', uid)
 
   it('refuse de rejoindre avec hasPicked déjà à true', async () => {
-    await assertFails(
-      setDoc(doc(dbAs('carol'), 'editions', E, 'members', 'carol'), { joinedAt: serverTimestamp(), code: CODE, hasPicked: true }),
-    )
+    await assertFails(joinBatch(dbAs('carol'), 'carol', CODE, { hasPicked: true }))
   })
 
   it('refuse de passer hasPicked à true sans prono', async () => {
@@ -252,8 +286,7 @@ describe('membres et hasPicked', () => {
     await assertFails(updateDoc(member('alice'), { hasPicked: false }))
   })
 
-  it('refuse de modifier son code ou sa date d’arrivée', async () => {
-    await assertFails(updateDoc(member('alice'), { code: 'AUTRE' }))
+  it('refuse de modifier sa date d’arrivée', async () => {
     await assertFails(updateDoc(member('alice'), { joinedAt: serverTimestamp() }))
   })
 
@@ -277,9 +310,7 @@ describe('visiteur non connecté', () => {
     await assertFails(getDoc(doc(db, 'users', 'alice')))
     await assertFails(getDoc(doc(db, 'usernames', 'alice')))
     await assertFails(getDocs(collection(db, 'editions', E, 'members')))
-    await assertFails(
-      setDoc(doc(db, 'editions', E, 'members', 'carol'), { joinedAt: serverTimestamp(), code: CODE, hasPicked: false }),
-    )
+    await assertFails(joinBatch(db, 'carol', CODE))
   })
 })
 

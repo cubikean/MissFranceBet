@@ -34,7 +34,7 @@ export interface CandidatesFile {
   candidates: Candidate[]
 }
 
-/** editions/{e}/members/{uid} (le champ code n'est jamais exposé) */
+/** editions/{e}/members/{uid} (aucun code stocké : voir joinProofs dans firestore.rules) */
 export interface Membership {
   uid: string
   joinedAt: Date | null

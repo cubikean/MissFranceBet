@@ -44,7 +44,8 @@ users/{uid}                                    displayName, displayNameLower, em
 usernames/{displayNameLower}                   uid   (unicité des pseudos)
 editionSecrets/{editionId}                     code  (aucune lecture client ; utilisé par les règles via get())
 editions/{editionId}                           title, showAt (timestamp), status, createdAt
-editions/{e}/members/{uid}                     joinedAt, code (doit égaler editionSecrets.code à la création)
+editions/{e}/members/{uid}                     joinedAt, hasPicked (aucun code stocké)
+editions/{e}/joinProofs/{uid}                  code  (preuve écrite avec l'adhésion dans le même batch, comparée à editionSecrets.code ; illisible par tous ; supprimée aussitôt)
 editions/{e}/candidates/{candidateId}          champs de src/data/editions/<e>/candidates.json
 editions/{e}/picks/{uid}                       candidateId, changeCount, updatedAt (== request.time)
 editions/{e}/pickHistory/{uid}_{changeCount}   uid, candidateId, changeCount, at (== request.time)

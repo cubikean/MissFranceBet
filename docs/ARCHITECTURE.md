@@ -50,7 +50,7 @@ Profil (`profile.ts`)
 
 Éditions (`editions.ts`)
 - `useCurrentEdition(): Live<Edition | null>` (dernière par showAt), `useEditions(): Live<Edition[]>`, `useEdition(id): Live<Edition | null>`
-- `joinEdition(editionId, code): Promise<void>` — `AppError('wrong-code')` ; sans effet si déjà membre
+- `joinEdition(editionId, code): Promise<void>` — `AppError('wrong-code')` ; sans effet si déjà membre ; écrit preuve + adhésion en batch, puis supprime la preuve
 - `useMembership(editionId): Live<Membership | null>` (moi), `useMembers(editionId): Live<Membership[]>` (pour compter qui a pronostiqué)
 - `normalizeCode(code)` (sans espaces, majuscules)
 
@@ -78,11 +78,11 @@ Erreurs (`errors.ts`) : `errorMessage(err): string` (français, prêt à affiche
 
 ## Garanties des règles (firestore.rules)
 
-- Code de soirée : `members/{uid}` ne se crée que si `code == get(editionSecrets/{e}).code` ; `editionSecrets` : lecture refusée à tous (admin compris), écriture admin.
+- Code de soirée : `members/{uid}` ne se crée que si la preuve `joinProofs/{uid}`, écrite dans le même batch, porte `code == get(editionSecrets/{e}).code`. La preuve est illisible par tous (auteur et admin compris) et supprimée par `joinEdition` juste après ; l'adhésion ne stocke aucun code. `editionSecrets` : `editionSecrets` : lecture refusée à tous (admin compris), écriture admin.
 - Pronos : écrits par leur propriétaire seulement, membre, `status == 'open'`, clés exactes, candidate existante, `updatedAt == request.time`, `changeCount` = 1 à la création puis ancien + 1 ; `getAfter(pickHistory/{uid}_{n})` doit avoir mêmes uid/candidate/compteur et `at == request.time`. Suppression interdite (même pour l'admin).
 - Historique : création seule, id `{uid}_{changeCount}`, `getAfter(picks/{uid})` cohérent avec `updatedAt == request.time` (donc écrit dans le même batch). Ni update ni delete.
 - Lecture : son prono/historique toujours ; ceux des autres seulement si membre et status != 'open' ; admin tout.
-- members : lisibles par les membres (le champ code n'y est visible que par des gens qui l'ont saisi) ; seule mise à jour : `hasPicked → true` dans un batch de prono.
+- members : lisibles par les membres (aucun code n'y est stocké) ; seule mise à jour : `hasPicked → true` dans un batch de prono.
 - results/candidates/editions (dont status)/editionSecrets : écriture admin. `admins` : jamais écrit par le client, lecture de son propre doc.
 - Pseudos : `usernames/{lower}` créé seulement si `users/{uid}.displayNameLower` correspond après écriture ; jamais mis à jour ; libéré uniquement par son propriétaire en changeant de pseudo. `users` modifiable par son propriétaire seulement.
 

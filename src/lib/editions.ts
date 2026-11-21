@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   limit,
@@ -7,7 +8,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
+  writeBatch,
   type DocumentData,
 } from 'firebase/firestore'
 import { db } from './firebase'
@@ -87,14 +88,22 @@ export async function joinEdition(editionId: string, code: string): Promise<void
   const uid = requireUid()
   const ref = doc(db, 'editions', editionId, 'members', uid)
   if ((await getDoc(ref)).exists()) return
+  // La preuve porte le code ; l'adhésion n'en contient pas. Les règles comparent la preuve
+  // au secret, puis on la supprime : le code ne reste stocké nulle part côté membres.
+  const proof = doc(db, 'editions', editionId, 'joinProofs', uid)
+  const batch = writeBatch(db)
+  batch.set(proof, { code: normalizeCode(code) })
+  batch.set(ref, { joinedAt: serverTimestamp(), hasPicked: false })
   try {
-    await setDoc(ref, { joinedAt: serverTimestamp(), code: normalizeCode(code), hasPicked: false })
+    await batch.commit()
   } catch (error) {
     if (isPermissionDenied(error)) {
       throw new AppError('wrong-code', "Ce code ne marche pas. Vérifie-le auprès de l'organisateur.")
     }
     throw error
   }
+  // Si la suppression échoue, la preuve reste illisible par tous : sans gravité.
+  await deleteDoc(proof).catch(() => undefined)
 }
 
 function toMembership(uid: string, d: DocumentData): Membership {
