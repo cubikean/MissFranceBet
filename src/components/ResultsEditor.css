@@ -1,0 +1,201 @@
+.results {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* Étapes : top 15, top 5, podium */
+.results__steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.results__step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-target);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-echarpe);
+  box-shadow: inset 0 0 0 1.5px var(--color-border);
+  font-weight: var(--weight-semibold);
+}
+
+.results__step[aria-pressed='true'] {
+  background: var(--color-echarpe);
+  color: var(--color-on-dark);
+  box-shadow: none;
+}
+
+.results__step:disabled {
+  color: var(--color-galet);
+  cursor: not-allowed;
+}
+
+.results__step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  font-size: var(--text-sm);
+}
+
+.results__panel {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* Grille de candidates : 3 colonnes, rapide au pouce */
+.result-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.result-tile {
+  position: relative;
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: var(--tap-target);
+  padding: 0 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-photo);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: center;
+  overflow: hidden;
+  transition: box-shadow var(--duration-fast) ease, opacity var(--duration-fast) ease;
+}
+
+.result-tile__photo {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  background: var(--color-bg);
+}
+
+.result-tile__region {
+  padding-inline: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.result-tile[aria-pressed='true'] {
+  border-color: var(--color-strass);
+  box-shadow: inset 0 0 0 2px var(--color-strass);
+}
+
+.result-tile:disabled:not([aria-pressed='true']) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.result-tile__badge {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--color-strass);
+  color: var(--color-on-dark);
+  font-weight: 700;
+}
+
+/* Barre collée au-dessus des onglets : compteur + enregistrer */
+.results__bar {
+  position: sticky;
+  bottom: calc(var(--tabbar-height) + var(--safe-bottom) + var(--space-2));
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+}
+
+.results__count {
+  display: grid;
+  line-height: 1.2;
+}
+
+.results__count strong {
+  font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.results__count .muted {
+  font-size: var(--text-sm);
+}
+
+.results__clear {
+  justify-self: start;
+}
+
+.results__error {
+  color: var(--color-strass);
+  font-weight: var(--weight-semibold);
+}
+
+/* Podium : trois places */
+.podium-slots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.podium-slot {
+  display: grid;
+  gap: var(--space-1);
+  min-height: calc(var(--tap-target) + var(--space-5));
+  padding: var(--space-2);
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--radius-photo);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: center;
+}
+
+.podium-slot[aria-pressed='true'] {
+  border: 2px solid var(--color-strass);
+}
+
+.podium-slot__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.podium-slot__value {
+  font-family: var(--font-display);
+  font-weight: var(--weight-title);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.podium-slot--winner .podium-slot__label::before {
+  content: '🥇 ';
+}
+
+.podium-slot--firstRunnerUp .podium-slot__label::before {
+  content: '🥈 ';
+}
+
+.podium-slot--secondRunnerUp .podium-slot__label::before {
+  content: '🥉 ';
+}
