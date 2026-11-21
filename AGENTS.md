@@ -145,7 +145,7 @@ Règles de collaboration :
 
 ## 9 bis. État du projet et reprise (mis à jour le 21/11/2026)
 
-**En ligne sur https://missfrancebet.web.app** (projet Firebase `missfrancebet`, plan Spark), déployé depuis `dev` pour la phase de test. Connexion Google opérationnelle (client OAuth configuré, voir README étape 3). Le porteur est super admin.
+**En ligne sur https://missfrancebet.web.app** (projet Firebase `missfrancebet`, plan Spark), `main` est au niveau de `dev` depuis le 21/11 et correspond à ce qui est en ligne. Pour la suite : travail sur `dev`, puis avance rapide de `main` (`git merge --ff-only dev`) avant chaque déploiement. Connexion Google opérationnelle (client OAuth configuré, voir README étape 3). Le porteur est super admin.
 
 **Fait (sur `dev`) :**
 - Cadrage (`AGENTS.md`, `docs/SPEC.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md`), données 2027 (31 candidates, photos), `scripts/prep_data.py`
@@ -159,7 +159,7 @@ Règles de collaboration :
 2. Agent **QA** (section 8) : revue indépendante, tentatives de triche contre les règles, parcours complet sur mobile (iPhone en PWA installée compris)
 3. Activer **App Check** (README) ; envisager le découpage du bundle (1 Mo) avec `React.lazy`
 4. Répétition générale avec 2–3 amis (J4, 29/11)
-5. Fusionner `dev` dans `main` et redéployer depuis `main` avant d'envoyer le vrai lien (J5, ≤ 05/12)
+5. Avant d'envoyer le vrai lien (J5, ≤ 05/12) : amener `main` au niveau de `dev` et déployer depuis `main`
 6. Reconfirmer la date et l'heure de l'émission dans `src/data/editions/2027/edition.json` (21h10 provisoire)
 
 ## 10. Préparer l'édition suivante (2028 et après), même sans le porteur
