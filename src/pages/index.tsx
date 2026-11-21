@@ -1,6 +1,5 @@
 // Une page par route de docs/SPEC.md, chacune dans son fichier de src/pages/.
 // Les routes sont dans src/App.tsx (ne pas les changer).
-import { Placeholder } from './Placeholder'
 
 export { LoginPage } from './LoginPage'
 export { WelcomePage } from './WelcomePage'

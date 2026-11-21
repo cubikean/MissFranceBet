@@ -118,9 +118,9 @@ On navigue avec une barre d'onglets en bas : Accueil, Candidates, Soirée, Profi
 |---|---|---|
 | Chef de projet | Cadrage, arbitrages avec le porteur, découpage, intégration, revue, commits et push | Actif |
 | Fondations | Scaffold, Firebase, couche données `src/lib`, règles Firestore et tests, README, ARCHITECTURE.md | Terminé (modèle par party) |
-| Front joueur | Connexion, onboarding, parties (créer, rejoindre, choisir), accueil, candidates, fiche, soirée, profil, bandeau d'installation | En cours |
-| Gestion | `/soiree/gestion` (admin de party : phases, résultats, membres, code) et `/admin` (super admin : toutes les parties) | En cours |
-| QA | Revue indépendante, tentatives de triche, test mobile, vérification du parcours complet | À la fin |
+| Front joueur | Connexion, onboarding, parties (créer, rejoindre, choisir), accueil, candidates, fiche, soirée, profil, bandeau d'installation | Terminé, fusionné dans `dev` (21/11) |
+| Gestion | `/soiree/gestion` (admin de party : phases, résultats, membres, code) et `/admin` (super admin : toutes les parties) | Terminé, fusionné dans `dev` (21/11) |
+| QA | Revue indépendante, tentatives de triche, test mobile, vérification du parcours complet | À lancer |
 
 Règles de collaboration :
 - **La couche `src/lib` est le contrat** entre les agents. Les écrans ne parlent jamais à Firestore directement : ils passent par les hooks et fonctions de `src/lib`. S'il manque une fonction, on l'ajoute dans `src/lib` avec ses types, sans contourner le contrat.
@@ -134,7 +134,7 @@ Règles de collaboration :
 |---|---|---|
 | J0 | Cadrage, données, design, spec | 21/11 ✅ |
 | J1 | Fondations : scaffold, Firebase, règles et tests | 21/11 ✅ |
-| J2 | Écrans joueur + back-office | 24/11 |
+| J2 | Écrans joueur + gestion | 21/11 ✅ (code écrit, pas encore vu dans un navigateur) |
 | J3 | QA, corrections, mise en ligne sur Firebase (projet créé par le porteur) | 27/11 |
 | J4 | Répétition générale : le porteur et 2–3 amis jouent une party de test complète (inscription → création de party → invitation → prono → fermeture → résultats) | 29/11 |
 | J5 | Création de la party 2027 réelle et envoi du lien d'invitation aux amis | ≤ 05/12 |
@@ -158,8 +158,8 @@ Règles de collaboration :
 - Limites connues : voir "Reste à faire" dans `docs/ARCHITECTURE.md` (écrans à construire, retour après connexion pour les liens d'invitation, bundle de 900 kB, `Sash` jamais vu dans un navigateur)
 
 **Pour reprendre :**
-1. Agents Front joueur et Gestion lancés en parallèle le 21/11 (section 8), avec `src/lib` comme contrat
-2. Agent QA, puis mise en ligne. Le porteur doit d'abord créer le projet Firebase `missfrancebet` (plan Spark) en suivant le README, et fournir la config web pour `.env.local`
+1. **Écrans J2 fusionnés dans `dev` le 21/11** : tous les écrans joueur et de gestion, avec les composants partagés (`ConfirmDialog`, `PartyJournal`, `ResultsEditor`, `InviteShare`, `EmojiPicker`, `Toast`, `Confetti`, `InstallBanner`). typecheck, lint et build passent, mais **aucun écran n'a encore été vu dans un navigateur** ni testé contre l'émulateur
+2. Prochaine étape : faire tourner l'app en local (émulateurs) et parcourir tous les écrans, puis agent QA, puis mise en ligne. Le porteur doit d'abord créer le projet Firebase `missfrancebet` (plan Spark) en suivant le README, et fournir la config web pour `.env.local`
 
 ## 10. Préparer l'édition suivante (2028 et après), même sans le porteur
 

@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { Confetti } from '../components/Confetti'
 import { InviteShare } from '../components/InviteShare'
+import { PartyJournal } from '../components/PartyJournal'
 import { Sash } from '../components/Sash'
-import { formatDateTime, formatTime, PHASE_LABEL, sashVariant, statusLabel, TROPHY_EMOJI } from '../components/display'
+import { formatDateTime, PHASE_LABEL, sashVariant, statusLabel, TROPHY_EMOJI } from '../components/display'
 import {
   canManageParty,
   candidateStatus,
@@ -22,7 +23,6 @@ import {
   useResults,
   useUsers,
   type Party,
-  type PartyEvent,
   type PickHistoryEntry,
   type Results,
   type UserProfile,
@@ -323,14 +323,6 @@ function Podium({
   )
 }
 
-function eventText(e: PartyEvent, users: Users): string {
-  const by = who(users, e.by)
-  if (e.type === 'owner') return `${by} a passé la main à ${who(users, e.to)}`
-  if (e.to === 'closed') return e.from === 'open' ? `${by} a fermé les pronos` : `${by} a repris la soirée`
-  if (e.to === 'open') return `${by} a rouvert les pronos`
-  return `${by} a terminé la party`
-}
-
 function Journal({ partyId, users }: { partyId: string; users: Users }) {
   const events = usePartyEvents(partyId)
   return (
@@ -342,19 +334,8 @@ function Journal({ partyId, users }: { partyId: string; users: Users }) {
         <p className="form-error" role="alert">
           {errorMessage(events.error)}
         </p>
-      ) : events.data.length === 0 ? (
-        <p className="muted">Rien pour l'instant. Chaque fermeture, réouverture ou passation de l'admin apparaîtra ici.</p>
       ) : (
-        <ol className="journal">
-          {[...events.data].reverse().map((e) => (
-            <li key={e.n}>
-              <time className="journal__time" dateTime={e.at?.toISOString()} title={formatDateTime(e.at)}>
-                {formatTime(e.at)}
-              </time>{' '}
-              {eventText(e, users)}
-            </li>
-          ))}
-        </ol>
+        <PartyJournal events={events.data} users={users} />
       )}
     </section>
   )
