@@ -45,7 +45,7 @@ Ne remets pas ces points en question sans l'accord du porteur du projet. Ajoute 
 | 2026-11-21 | **Historique sur toutes les éditions** (notion d'"édition" par année) | Choix du porteur |
 | 2026-11-21 | **Firebase, plan Spark (gratuit)** : Auth, Firestore, Hosting. **Pas de Cloud Functions ni de Storage** | Gratuit et sans mise en pause. Supabase est écarté parce que son plan gratuit met en pause les projets inactifs depuis 7 jours, ce qui ne convient pas à une app utilisée une fois par an. Storage exige le plan Blaze |
 | 2026-11-21 | Photos des candidates **embarquées en statique** dans `public/` | Pas de Storage sur Spark |
-| 2026-11-21 | Avatars = emojis (pas d'upload) | Pas de Storage, et c'est plus simple |
+| 2026-11-21 | Avatars = emojis (pas d'upload) | Pas de Storage, et c'est plus simple. **Remplacé** : photo de profil (voir plus bas) |
 | 2026-11-21 | Stack front : Vite + React + TypeScript strict + react-router + vite-plugin-pwa, CSS natif avec tokens | Compétences du porteur, aucune dépendance UI lourde |
 | 2026-11-21 | Direction visuelle "l'écharpe" (voir DESIGN.md) | L'écharpe bleu marine des photos officielles devient la signature de l'app |
 | 2026-11-21 | Domaine : **missfrancebet.web.app**. L'ID du projet Firebase (et du site Hosting) est `missfrancebet` ; `authDomain` vaut `missfrancebet.web.app` | Gratuit et immédiat ; choix du porteur |
@@ -66,10 +66,12 @@ Ne remets pas ces points en question sans l'accord du porteur du projet. Ajoute 
 | 2026-11-21 | Emailing propre (mot de passe oublié hors spam) : plus tard, selon l'avancement | Un plus, pas un prérequis |
 | 2026-11-21 | **Pas de validation des membres** par l'admin ; à la place, l'admin peut **changer le code** (l'ancien lien cesse de marcher) et **Firebase App Check** (gratuit) bloque les bots | Deviner un code est irréaliste (31^6 ≈ 887 millions) ; le vrai risque d'un bot est d'épuiser le quota gratuit. Aucune friction pour les joueurs |
 | 2026-11-21 | Skill de design **UI UX Pro Max** installée dans `.claude/skills/ui-ux-pro-max/` (MIT, nextlevelbuilder) pour les agents qui font de l'interface | Demande du porteur |
+| 2026-11-21 | **Plus d'emojis** : photo de profil **facultative** (« Parcourir » ou « Prendre une photo » sur mobile) ; sans photo, l'initiale du pseudo. La photo est recadrée en carré de 256 px et compressée dans le navigateur, puis rangée en data URL dans `users/{uid}.photo` (100 000 caractères au plus) | Choix du porteur ; Storage exige le plan Blaze, cette solution reste à 0 € |
+| 2026-11-21 | Les profils ne sont **plus listables** : lecture par uid seulement (on connaît l'uid de ses partenaires de party), liste réservée au super admin | Avec des photos, un inconnu inscrit ne doit pas pouvoir parcourir tous les profils |
 
 ## 4. Règles du jeu (résumé ; le détail est dans SPEC.md)
 
-1. Je me connecte (Google ou email), je choisis un pseudo et un emoji.
+1. Je me connecte (Google ou email), je choisis un pseudo et, si je veux, une photo.
 2. Je **crée une party** pour l'édition en cours (j'en deviens l'admin, l'app me donne un code) **ou j'en rejoins une** avec le code ou le lien `/rejoindre/<code>` qu'un ami m'a envoyé.
 3. Je parcours les candidates et j'en **choisis une** pour ma party. Je peux changer d'avis autant que je veux tant que les pronos sont ouverts. Chaque changement est horodaté par le serveur.
 4. L'admin de la party ferme les pronos. Plus aucun changement n'est possible et **tous les pronos de la party sont révélés**, avec l'historique des changements d'avis.
@@ -125,7 +127,7 @@ On navigue avec une barre d'onglets en bas : Accueil, Candidates, Soirée, Profi
 Règles de collaboration :
 - **La couche `src/lib` est le contrat** entre les agents. Les écrans ne parlent jamais à Firestore directement : ils passent par les hooks et fonctions de `src/lib`. S'il manque une fonction, on l'ajoute dans `src/lib` avec ses types, sans contourner le contrat.
 - Le composant `Sash` (l'écharpe) est partagé : on ne le duplique pas.
-- Pour tout travail d'interface, utiliser la skill **`ui-ux-pro-max`** (`.claude/skills/ui-ux-pro-max/`, script `scripts/search.py`) comme référence UX et accessibilité. Ses résultats sont des **recommandations** : `docs/DESIGN.md` et les décisions de ce fichier priment toujours (par exemple, la direction "l'écharpe", les tokens existants et les avatars emoji, qui sont un contenu choisi par le joueur et non des icônes). On ne lance pas son mode qui persiste un design system dans le dépôt sans l'accord du porteur.
+- Pour tout travail d'interface, utiliser la skill **`ui-ux-pro-max`** (`.claude/skills/ui-ux-pro-max/`, script `scripts/search.py`) comme référence UX et accessibilité. Ses résultats sont des **recommandations** : `docs/DESIGN.md` et les décisions de ce fichier priment toujours (par exemple, la direction "l'écharpe" et les tokens existants). On ne lance pas son mode qui persiste un design system dans le dépôt sans l'accord du porteur.
 - Les agents ne committent pas eux-mêmes, sauf consigne explicite : c'est le chef de projet qui intègre.
 
 ## 9. Roadmap

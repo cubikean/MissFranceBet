@@ -14,6 +14,7 @@ import {
   collection,
   collectionGroup,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -34,6 +35,9 @@ const P2 = 'p2'
 const CODE = 'K7QMZ3'
 const CODE2 = 'DANDAN'
 let env: RulesTestEnvironment
+
+/** Data URL plausible de la taille voulue (le contenu base64 n'est pas décodé par les règles). */
+const fakePhoto = (type: string, chars: number) => `data:image/${type};base64,${'A'.repeat(chars)}`
 
 const dbAs = (uid: string | null): Firestore =>
   (uid ? env.authenticatedContext(uid).firestore() : env.unauthenticatedContext().firestore()) as unknown as Firestore
@@ -685,11 +689,11 @@ describe('visiteur non connecté', () => {
 })
 
 describe('pseudos et profils', () => {
-  async function claim(db: Firestore, uid: string, name: string) {
+  async function claim(db: Firestore, uid: string, name: string, photo: unknown = null) {
     const lower = name.toLowerCase()
     return runTransaction(db, async (tx) => {
       tx.set(doc(db, 'usernames', lower), { uid })
-      tx.set(doc(db, 'users', uid), { displayName: name, displayNameLower: lower, emoji: '😎', createdAt: serverTimestamp() })
+      tx.set(doc(db, 'users', uid), { displayName: name, displayNameLower: lower, photo, createdAt: serverTimestamp() })
     })
   }
 
@@ -706,14 +710,14 @@ describe('pseudos et profils', () => {
 
   it('refuse un profil sans réservation du pseudo', async () => {
     await assertFails(
-      setDoc(doc(dbAs('bob'), 'users', 'bob'), { displayName: 'Bob', displayNameLower: 'bob', emoji: '🦄', createdAt: serverTimestamp() }),
+      setDoc(doc(dbAs('bob'), 'users', 'bob'), { displayName: 'Bob', displayNameLower: 'bob', photo: null, createdAt: serverTimestamp() }),
     )
   })
 
   it('refuse de modifier le profil d’un autre', async () => {
     await assertSucceeds(claim(dbAs('alice'), 'alice', 'Hugo'))
-    await assertFails(updateDoc(doc(dbAs('bob'), 'users', 'alice'), { emoji: '💩' }))
-    await assertSucceeds(updateDoc(doc(dbAs('alice'), 'users', 'alice'), { emoji: '👑' }))
+    await assertFails(updateDoc(doc(dbAs('bob'), 'users', 'alice'), { photo: fakePhoto('jpeg', 100) }))
+    await assertSucceeds(updateDoc(doc(dbAs('alice'), 'users', 'alice'), { photo: fakePhoto('jpeg', 100) }))
   })
 
   it('change de pseudo en libérant l’ancien', async () => {
@@ -729,5 +733,59 @@ describe('pseudos et profils', () => {
     b2.set(doc(alice, 'usernames', 'autre'), { uid: 'alice' })
     b2.update(doc(alice, 'users', 'alice'), { displayName: 'Autre', displayNameLower: 'autre' })
     await assertFails(b2.commit())
+  })
+})
+
+describe('photos de profil', () => {
+  async function claim(db: Firestore, uid: string, name: string, photo: unknown) {
+    const lower = name.toLowerCase()
+    return runTransaction(db, async (tx) => {
+      tx.set(doc(db, 'usernames', lower), { uid })
+      tx.set(doc(db, 'users', uid), { displayName: name, displayNameLower: lower, photo, createdAt: serverTimestamp() })
+    })
+  }
+
+  it('accepte un profil sans photo, ou avec une photo WebP ou JPEG compressée', async () => {
+    await assertSucceeds(claim(dbAs('alice'), 'alice', 'Alice', null))
+    await assertSucceeds(claim(dbAs('bob'), 'bob', 'Bob', fakePhoto('webp', 60_000)))
+    await assertSucceeds(claim(dbAs('carol'), 'carol', 'Carol', fakePhoto('jpeg', 1_000) + '=='))
+  })
+
+  it('refuse une photo trop lourde, d’un autre format, ou une adresse externe', async () => {
+    await assertFails(claim(dbAs('alice'), 'alice', 'Alice', fakePhoto('webp', 100_001)))
+    await assertFails(claim(dbAs('alice'), 'alice', 'Alice', fakePhoto('png', 100)))
+    await assertFails(claim(dbAs('alice'), 'alice', 'Alice', fakePhoto('svg+xml', 100)))
+    await assertFails(claim(dbAs('alice'), 'alice', 'Alice', 'https://exemple.fr/moi.jpg'))
+    await assertFails(claim(dbAs('alice'), 'alice', 'Alice', 'data:image/webp;base64,<script>'))
+    await assertFails(claim(dbAs('alice'), 'alice', 'Alice', 42))
+  })
+
+  it('laisse changer ou retirer sa photo', async () => {
+    await assertSucceeds(claim(dbAs('alice'), 'alice', 'Alice', null))
+    const me = doc(dbAs('alice'), 'users', 'alice')
+    await assertSucceeds(updateDoc(me, { photo: fakePhoto('webp', 500) }))
+    await assertSucceeds(updateDoc(me, { photo: null }))
+    await assertFails(updateDoc(me, { photo: fakePhoto('png', 500) }))
+  })
+
+  it('lit un profil par son uid, mais interdit de lister tous les profils (sauf super admin)', async () => {
+    await assertSucceeds(claim(dbAs('alice'), 'alice', 'Alice', fakePhoto('webp', 500)))
+    await assertSucceeds(getDoc(doc(dbAs('bob'), 'users', 'alice')))
+    await assertFails(getDocs(collection(dbAs('bob'), 'users')))
+    await assertSucceeds(getDocs(collection(dbAs('boss'), 'users')))
+    await assertFails(getDoc(doc(dbAs(null), 'users', 'alice')))
+  })
+
+  it('accepte les anciens profils à emoji : on peut le garder ou le retirer, pas le changer', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore() as unknown as Firestore
+      await setDoc(doc(db, 'usernames', 'hugo'), { uid: 'alice' })
+      await setDoc(doc(db, 'users', 'alice'), { displayName: 'Hugo', displayNameLower: 'hugo', emoji: '😎', createdAt: Timestamp.now() })
+    })
+    const me = doc(dbAs('alice'), 'users', 'alice')
+    await assertSucceeds(updateDoc(me, { photo: fakePhoto('webp', 500) }))
+    await assertFails(updateDoc(me, { emoji: '👑' }))
+    await assertSucceeds(updateDoc(me, { emoji: deleteField() }))
+    await assertFails(updateDoc(me, { emoji: '👑' }))
   })
 })

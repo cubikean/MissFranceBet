@@ -9,17 +9,6 @@
   overflow-wrap: anywhere;
 }
 
-.profile__avatar {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 4rem;
-  height: 4rem;
-  border-radius: 50%;
-  background: var(--color-surface);
-  font-size: var(--text-xl);
-}
-
 .profile__counts {
   font-size: var(--text-md);
   font-weight: var(--weight-semibold);

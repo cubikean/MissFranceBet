@@ -25,7 +25,7 @@ const STATUS_LABEL: Record<PartyStatus, string> = {
 export function AdminPage() {
   const isSuperAdmin = useIsSuperAdmin().data
   const parties = useAllParties(isSuperAdmin)
-  const users = useUsers().data
+  const users = useUsers('all').data
   const navigate = useNavigate()
 
   function manage(party: Party) {
@@ -83,7 +83,7 @@ function PartyRow({ party, users, onManage }: { party: Party; users: Record<stri
         </div>
         <div>
           <dt>Admin</dt>
-          <dd>{owner ? `${owner.emoji} ${owner.displayName}` : 'Joueur inconnu'}</dd>
+          <dd>{owner?.displayName ?? 'Joueur inconnu'}</dd>
         </div>
         <div>
           <dt>Membres</dt>

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
-import { AVATAR_EMOJIS, EmojiPicker } from '../components/EmojiPicker'
+import { PhotoPicker } from '../components/PhotoPicker'
 import { claimUsername, errorMessage, USERNAME_MAX, usernameError, useProfile } from '../lib'
 import '../styles/ui.css'
 import './WelcomePage.css'
@@ -11,14 +11,14 @@ function fromState(state: unknown): string | null {
   return typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') && from !== '/' ? from : null
 }
 
-/** Onboarding (une seule fois) : pseudo unique + emoji avatar. */
+/** Onboarding (une seule fois) : pseudo unique + photo facultative. */
 export function WelcomePage() {
   const profile = useProfile()
   const location = useLocation()
   const navigate = useNavigate()
   const from = fromState(location.state)
   const [name, setName] = useState('')
-  const [emoji, setEmoji] = useState<string>(AVATAR_EMOJIS[0] ?? '😎')
+  const [photo, setPhoto] = useState<string | null>(null)
   const [touched, setTouched] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,7 +42,7 @@ export function WelcomePage() {
     setBusy(true)
     setError(null)
     try {
-      await claimUsername(name, emoji)
+      await claimUsername(name, photo)
       navigate(from ?? '/parties', { replace: true })
     } catch (err) {
       setError(errorMessage(err))
@@ -54,7 +54,7 @@ export function WelcomePage() {
     <main className="page welcome">
       <header className="stack">
         <h1>Bienvenue</h1>
-        <p>Choisis ton pseudo et ton emoji : c'est comme ça que tes amis te verront dans la party.</p>
+        <p>Choisis ton pseudo, et si tu veux une photo : c'est comme ça que tes amis te verront dans la party.</p>
       </header>
 
       <form className="stack stack--lg" onSubmit={(e) => void submit(e)} noValidate>
@@ -78,12 +78,7 @@ export function WelcomePage() {
           </p>
         </div>
 
-        <EmojiPicker value={emoji} onChange={setEmoji} />
-
-        <div className="welcome__preview" aria-hidden="true">
-          <span className="welcome__avatar">{emoji}</span>
-          <span>{name.trim() || 'Ton pseudo'}</span>
-        </div>
+        <PhotoPicker value={photo} name={name} onChange={setPhoto} disabled={busy} />
 
         {error && (
           <p className="form-error" role="alert">

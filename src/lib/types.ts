@@ -112,7 +112,8 @@ export interface UserProfile {
   uid: string
   displayName: string
   displayNameLower: string
-  emoji: string
+  /** Photo de profil (data URL WebP ou JPEG, carré de 256 px), null = initiale du pseudo */
+  photo: string | null
   createdAt: Date | null
 }
 

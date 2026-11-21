@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { EmojiPicker } from '../components/EmojiPicker'
+import { Avatar } from '../components/Avatar'
+import { PhotoPicker } from '../components/PhotoPicker'
 import { Sash } from '../components/Sash'
 import { TROPHY_EMOJI, TROPHY_LABEL } from '../components/display'
 import {
@@ -37,9 +38,7 @@ export function ProfilePage() {
   return (
     <section className="page profile stack stack--lg" aria-labelledby="profile-title">
       <header className="profile__header">
-        <span className="profile__avatar" aria-hidden="true">
-          {profile.emoji}
-        </span>
+        <Avatar profile={profile} size="lg" />
         <h1 id="profile-title">{profile.displayName}</h1>
       </header>
 
@@ -121,13 +120,13 @@ export function ProfilePage() {
 
 function ProfileForm({ profile }: { profile: UserProfile }) {
   const [name, setName] = useState(profile.displayName)
-  const [emoji, setEmoji] = useState(profile.emoji)
+  const [photo, setPhoto] = useState(profile.photo)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
   const invalid = usernameError(name)
-  const changed = normalizeUsername(name) !== profile.displayName || emoji !== profile.emoji
+  const changed = normalizeUsername(name) !== profile.displayName || photo !== profile.photo
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -139,7 +138,7 @@ function ProfileForm({ profile }: { profile: UserProfile }) {
     setError(null)
     setSaved(false)
     try {
-      await updateProfile(profile, { displayName: name, emoji })
+      await updateProfile(profile, { displayName: name, photo })
       setSaved(true)
     } catch (err) {
       setError(errorMessage(err))
@@ -169,10 +168,12 @@ function ProfileForm({ profile }: { profile: UserProfile }) {
           }}
         />
       </div>
-      <EmojiPicker
-        value={emoji}
+      <PhotoPicker
+        value={photo}
+        name={name}
+        disabled={busy}
         onChange={(v) => {
-          setEmoji(v)
+          setPhoto(v)
           setSaved(false)
         }}
       />

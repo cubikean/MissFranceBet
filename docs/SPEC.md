@@ -34,14 +34,15 @@ Seuls l'admin de la party et le super admin changent de phase. Le retour en arri
 ## Comptes
 - Connexion **Google** (OAuth) ou **email + mot de passe**, avec "mot de passe oublié" (email Firebase natif). Les deux sont gratuits sur le plan Spark.
 - Sur iOS en mode installé (standalone), la popup est peu fiable : il faut utiliser `signInWithRedirect` sur mobile et `signInWithPopup` sur desktop. `authDomain` doit être le domaine d'hébergement Firebase (`missfrancebet.web.app`), pour éviter les problèmes de cookies tiers sur Safari.
-- Après la première connexion, l'onboarding demande un **pseudo** (2 à 20 caractères, unique) et un **emoji avatar**.
+- Après la première connexion, l'onboarding demande un **pseudo** (2 à 20 caractères, unique) et propose une **photo facultative** : « Parcourir » (galerie ou fichiers) ou « Prendre une photo » (appareil photo frontal, sur mobile seulement). Sans photo, l'avatar affiche l'initiale du pseudo. La photo est recadrée en carré de 256 px et compressée dans le navigateur (WebP, ou JPEG sur Safari), puis rangée dans le profil : pas de Storage, 0 €.
+- Les profils ne sont lisibles que **par uid** (on connaît celui de ses partenaires de party) : un inscrit ne peut pas parcourir tous les profils et leurs photos. Seul le super admin peut les lister.
 - Super admin : un document `admins/{uid}` créé à la main dans la console Firebase. Aucune interface ne permet de le devenir.
 
 ## Écrans (routes)
 | Route | Contenu |
 |---|---|
 | `/connexion` | Google + email/mot de passe, création de compte, mot de passe oublié |
-| `/bienvenue` | Onboarding : pseudo + emoji (une seule fois) |
+| `/bienvenue` | Onboarding : pseudo + photo facultative (une seule fois) |
 | `/rejoindre/:code?` | Saisie du code d'une party ; `/rejoindre/K7QMZ3` = lien d'invitation, code pré-rempli. Si on n'est pas connecté, on y revient après la connexion |
 | `/parties` | Mes parties de l'édition en cours (et des précédentes) : choisir la **party active**, **créer** une party (nom), **rejoindre** avec un code, **quitter** une party (popup de confirmation) |
 | `/` | Accueil : la date de l'émission, un compte à rebours, la party active, mon écharpe (mon prono), l'action suivante selon la phase. Sans party : « Crée ta party ou rejoins celle de tes amis » |
@@ -49,7 +50,7 @@ Seuls l'admin de la party et le super admin changent de phase. Le retour en arri
 | `/candidates/:id` | Fiche (photo en pied, âge, taille, origine, profession, passions, Instagram) et bouton "Choisir Miss <Région>" (désactivé si fermé ou sans party) |
 | `/soiree` | Party active. Avant la fermeture : le nombre de joueurs ayant pronostiqué (sans dire qui a choisi quoi) et le code d'invitation à partager. Après : le prono de chaque joueur sous forme d'écharpe, le statut en direct, le nombre de changements d'avis et l'historique dépliable ; puis le podium et les trophées. Le journal des phases. Bouton « Gérer la party » si j'en suis l'admin |
 | `/soiree/gestion` | Admin de la party active (ou super admin) : renommer, changer de phase (fermer, rouvrir, terminer), saisir top 15 / top 5 / podium, retirer un membre, **transmettre le rôle d'admin**, code d'invitation à partager et **changer le code**, **supprimer la party** (double confirmation, phrase à recopier) |
-| `/profil` | Pseudo, emoji (modifiables), mes trophées de toutes les parties et éditions, déconnexion |
+| `/profil` | Pseudo et photo (modifiables, photo retirable), mes trophées de toutes les parties et éditions, déconnexion |
 | `/admin` | Super admin uniquement : liste de toutes les parties (édition, nom, admin, nombre de membres, phase), accès à la gestion de n'importe laquelle, bouton **« Télécharger une sauvegarde »** |
 | — | Bandeau "Installer l'app" : un tuto en 3 étapes sur iOS Safari (Partager → Sur l'écran d'accueil), le prompt natif sur Android |
 
@@ -58,7 +59,7 @@ La **party active** est mémorisée sur l'appareil (`useActivePartyId`). Si elle
 ## Modèle de données Firestore
 ```
 admins/{uid}                                   {}  (super admin, créé à la main)
-users/{uid}                                    displayName, displayNameLower, emoji, createdAt
+users/{uid}                                    displayName, displayNameLower, photo (data URL WebP/JPEG ou null), createdAt  (get par uid ; list : super admin)
 usernames/{displayNameLower}                   uid   (unicité des pseudos)
 partyCodes/{CODE}                              partyId, editionId  (l'id EST le code : unicité ; get seulement, pas de list)
 parties/{p}                                    editionId, name, ownerUid, code, status, eventCount, createdAt

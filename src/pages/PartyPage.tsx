@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
+import { Avatar } from '../components/Avatar'
 import { Confetti } from '../components/Confetti'
 import { InviteShare } from '../components/InviteShare'
 import { PartyJournal } from '../components/PartyJournal'
@@ -21,7 +22,7 @@ import {
   usePickHistory,
   usePicks,
   useResults,
-  useUsers,
+  usePartyUsers,
   type Party,
   type PickHistoryEntry,
   type Results,
@@ -42,7 +43,7 @@ export function PartyPage() {
   const isSuperAdmin = useIsSuperAdmin().data
   const active = useActiveParty()
   const party = active.data
-  const users = useUsers().data
+  const users = usePartyUsers(party?.id ?? null).data
 
   if (active.loading) {
     return (
@@ -116,9 +117,7 @@ function BeforeClosing({ party, users }: { party: Party; users: Users }) {
           <ul className="players">
             {sorted.map((m) => (
               <li key={m.uid} className="player player--compact">
-                <span className="player__avatar" aria-hidden="true">
-                  {users[m.uid]?.emoji ?? '🙂'}
-                </span>
+                <Avatar profile={users[m.uid]} size="sm" />
                 <span className="player__name">{who(users, m.uid)}</span>
                 <span className={m.hasPicked ? 'player__done' : 'muted'}>{m.hasPicked ? 'a choisi' : 'pas encore'}</span>
               </li>
@@ -200,9 +199,7 @@ function Revealed({ party, users, myUid }: { party: Party; users: Users; myUid: 
               return (
                 <li key={pick.uid} className={`player${pick.uid === myUid ? ' player--me' : ''}`}>
                   <div className="player__row">
-                    <span className="player__avatar" aria-hidden="true">
-                      {users[pick.uid]?.emoji ?? '🙂'}
-                    </span>
+                    <Avatar profile={users[pick.uid]} />
                     <span className="player__name">
                       {who(users, pick.uid)}
                       {pick.uid === myUid && <span className="muted"> (toi)</span>}
@@ -312,7 +309,7 @@ function Podium({
               )}
               {winners.length > 0 && (
                 <span className="podium__players">
-                  {winners.map((p) => `${users[p.pick.uid]?.emoji ?? ''} ${who(users, p.pick.uid)}`).join(', ')}
+                  {winners.map((p) => who(users, p.pick.uid)).join(', ')}
                 </span>
               )}
             </li>

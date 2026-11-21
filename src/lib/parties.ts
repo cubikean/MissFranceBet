@@ -20,7 +20,8 @@ import { requireUid, useAuth } from './auth'
 import { AppError, isPermissionDenied } from './errors'
 import { toDate, useSnapshot } from './live'
 import { currentEdition, getEdition } from './editions'
-import type { Live, Membership, Party, PartyEvent, PartyStatus } from './types'
+import { useUsers } from './profile'
+import type { Live, Membership, Party, PartyEvent, PartyStatus, UserProfile } from './types'
 
 // ---------- Code d'invitation ----------
 
@@ -373,4 +374,22 @@ export function useActiveParty(): Live<Party | null> {
   const parties = useMyParties(currentEdition()?.id ?? null)
   const party = parties.data.find((p) => p.id === activeId) ?? parties.data[0] ?? null
   return { data: party, loading: parties.loading, error: parties.error }
+}
+
+/**
+ * Profils utiles à l'affichage d'une party : ses membres, plus les auteurs et cibles du journal
+ * (un ancien membre, le super admin). Les profils ne sont pas listables : on les lit par uid.
+ */
+export function usePartyUsers(partyId: string | null): Live<Record<string, UserProfile>> {
+  const members = useMembers(partyId)
+  const events = usePartyEvents(partyId)
+  const uids = new Set(members.data.map((m) => m.uid))
+  for (const e of events.data) {
+    uids.add(e.by)
+    if (e.type === 'owner') {
+      uids.add(e.from)
+      uids.add(e.to)
+    }
+  }
+  return useUsers([...uids])
 }

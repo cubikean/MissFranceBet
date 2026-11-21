@@ -23,13 +23,14 @@ import {
   useParty,
   usePartyEvents,
   useResults,
-  useUsers,
+  usePartyUsers,
   type Live,
   type Membership,
   type Party,
   type PartyStatus,
   type UserProfile,
 } from '../lib'
+import { Avatar } from '../components/Avatar'
 import { ConfirmDialog, type ConfirmDialogProps } from '../components/ConfirmDialog'
 import { PartyJournal } from '../components/PartyJournal'
 import { ResultsEditor } from '../components/ResultsEditor'
@@ -115,7 +116,7 @@ function PartyAdmin({
   onDelete: (typedPhrase: string) => Promise<void>
 }) {
   const members = useMembers(party.id)
-  const users = useUsers().data
+  const users = usePartyUsers(party.id).data
   const events = usePartyEvents(party.id)
   const results = useResults(party.id)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
@@ -509,9 +510,7 @@ function MemberList({
         return (
           <li key={m.uid} className="member">
             <div className="member__who">
-              <span className="member__emoji" aria-hidden="true">
-                {users[m.uid]?.emoji ?? '🙂'}
-              </span>
+              <Avatar profile={users[m.uid]} />
               <span className="member__name">
                 {name}
                 {m.uid === uid && <span className="muted"> (toi)</span>}

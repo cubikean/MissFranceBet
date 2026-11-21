@@ -44,10 +44,12 @@ Auth (`auth.ts`)
 - `requireUid(): string`, `prefersRedirect(): boolean`
 
 Profil (`profile.ts`)
-- `claimUsername(displayName, emoji): Promise<void>` — transaction, crée le profil ou change de pseudo ; `AppError('username-taken' | 'username-invalid')`
-- `updateProfile(current: UserProfile, patch: { displayName?; emoji? }): Promise<void>`
+- `claimUsername(displayName, photo?): Promise<void>` — transaction, crée le profil ou change de pseudo ; `AppError('username-taken' | 'username-invalid')`
+- `updateProfile(current: UserProfile, patch: { displayName?; photo? }): Promise<void>`, `setProfilePhoto(photo | null)`
+- `photoFromFile(file): Promise<dataUrl>` — carré de `PHOTO_SIZE` (256) px, WebP (JPEG sur Safari), sous `PHOTO_MAX_CHARS` (100 000) ; `AppError('photo-invalid')`
 - `useProfile(uid?: string | null): Live<UserProfile | null>` (défaut : moi)
-- `useUsers(): Live<Record<uid, UserProfile>>`
+- `useUsers(uids | 'all'): Live<Record<uid, UserProfile>>` — lus un par un ('all' : super admin seulement) ; pour une party, préférer `usePartyUsers(partyId)` (membres + auteurs du journal)
+- Composants : `<Avatar profile size />` (photo ou initiale), `<PhotoPicker value name onChange />` (Parcourir / Prendre une photo)
 - `usernameError(name): string | null`, `normalizeUsername(name)`, `USERNAME_MIN/MAX`
 
 Éditions et candidates embarquées (`editions.ts`, `candidates.ts`)

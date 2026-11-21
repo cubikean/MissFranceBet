@@ -3,7 +3,7 @@ import { FirebaseError } from 'firebase/app'
 /** Erreur métier avec un message prêt à afficher. */
 export class AppError extends Error {
   constructor(
-    public readonly code: 'username-taken' | 'username-invalid' | 'wrong-code' | 'not-signed-in' | 'picks-closed' | 'party-invalid' | 'unknown-candidate',
+    public readonly code: 'username-taken' | 'username-invalid' | 'wrong-code' | 'not-signed-in' | 'picks-closed' | 'party-invalid' | 'unknown-candidate' | 'photo-invalid',
     message: string,
   ) {
     super(message)

@@ -37,8 +37,13 @@ service cloud.firestore {
         && !n.matches('.*/.*');
     }
 
-    function validEmoji(x) {
-      return x is string && x.size() >= 1 && x.size() <= 16;
+    // Photo de profil : null, ou data URL WebP/JPEG compressée par l'app (PHOTO_MAX_CHARS dans
+    // src/lib/profile.ts). Pas de Storage (plan Blaze) : elle vit dans users/{uid}.
+    function validPhoto(x) {
+      return x == null
+        || (x is string
+          && x.size() <= 100000
+          && x.matches('^data:image/(webp|jpeg);base64,[A-Za-z0-9+/]+={0,2}$'));
     }
 
     function usernamePath(lower) {
@@ -105,24 +110,30 @@ service cloud.firestore {
     // ---------- Profils et pseudos ----------
 
     match /users/{uid} {
-      allow read: if signedIn();
+      // Lecture par uid seulement (on connaît l'uid de ses partenaires de party) : impossible
+      // de lister tous les profils et leurs photos, sauf pour le super admin (sauvegarde).
+      allow get: if signedIn();
+      allow list: if isSuperAdmin();
 
       // Le pseudo doit être réservé dans le même batch/transaction (usernames/{lower}).
       allow create: if isSelf(uid)
-        && exactKeys(request.resource.data, ['displayName', 'displayNameLower', 'emoji', 'createdAt'])
+        && exactKeys(request.resource.data, ['displayName', 'displayNameLower', 'photo', 'createdAt'])
         && validName(request.resource.data.displayName)
         && request.resource.data.displayNameLower == request.resource.data.displayName.lower()
-        && validEmoji(request.resource.data.emoji)
+        && validPhoto(request.resource.data.photo)
         && request.resource.data.createdAt == request.time
         && getAfter(usernamePath(request.resource.data.displayNameLower)).data.uid == uid;
 
       // Changer de pseudo = réserver le nouveau ET libérer l'ancien dans la même écriture.
+      // 'emoji' : ancien champ des premiers profils, qu'on peut seulement laisser tel quel ou retirer.
       allow update: if isSelf(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['displayName', 'displayNameLower', 'emoji'])
+             .hasOnly(['displayName', 'displayNameLower', 'photo', 'emoji'])
+        && !request.resource.data.diff(resource.data).addedKeys().hasAny(['emoji'])
+        && !request.resource.data.diff(resource.data).changedKeys().hasAny(['emoji'])
         && validName(request.resource.data.displayName)
         && request.resource.data.displayNameLower == request.resource.data.displayName.lower()
-        && validEmoji(request.resource.data.emoji)
+        && validPhoto(request.resource.data.get('photo', null))
         && (
           request.resource.data.displayNameLower == resource.data.displayNameLower
           || (

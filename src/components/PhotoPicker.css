@@ -1,0 +1,39 @@
+.photo-picker {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.photo-picker__legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-weight: var(--weight-semibold);
+}
+
+.photo-picker__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.photo-picker__actions {
+  display: grid;
+  flex: 1;
+  gap: var(--space-2);
+}
+
+.photo-picker__choose {
+  cursor: pointer;
+}
+
+/* Le label joue le rôle du bouton : focus visible quand l'input caché a le focus. */
+.photo-picker input:focus-visible + .photo-picker__choose {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.photo-picker__help {
+  font-size: var(--text-sm);
+}

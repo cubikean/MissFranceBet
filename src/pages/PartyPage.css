@@ -63,17 +63,6 @@
   gap: var(--space-3);
 }
 
-.player__avatar {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  background: var(--color-bg);
-  font-size: var(--text-md);
-}
-
 .player__name {
   flex: 1;
   min-width: 0;

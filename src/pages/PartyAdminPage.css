@@ -162,11 +162,6 @@
   min-width: 0;
 }
 
-.manage .member__emoji {
-  font-size: var(--text-md);
-  line-height: 1;
-}
-
 .manage .member__name {
   min-width: 0;
   font-weight: var(--weight-semibold);
