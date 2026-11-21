@@ -1,0 +1,388 @@
+rules_version = '2';
+
+// Règles de sécurité de Pronos Miss. Référence : docs/SPEC.md.
+// Principe : tout est refusé sauf ce qui est explicitement autorisé ci-dessous.
+// Les tests sont dans tests/rules/ (npm run test:rules).
+//
+// Modèle : chaque joueur peut créer une party (groupe d'amis) pour une édition ; il en devient
+// l'admin (ownerUid). Les autres la rejoignent avec son code. Le super admin (admins/{uid})
+// gère toutes les parties. Éditions et candidates sont embarquées dans l'app, pas dans Firestore.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // admins/{uid} est créé à la main dans la console, jamais par le client.
+    function isSuperAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function exactKeys(data, keys) {
+      return data.keys().hasOnly(keys) && data.keys().hasAll(keys);
+    }
+
+    function validName(n) {
+      return n is string
+        && n.size() >= 2 && n.size() <= 20
+        && n.trim() == n
+        && !n.matches('.*/.*');
+    }
+
+    function validEmoji(x) {
+      return x is string && x.size() >= 1 && x.size() <= 16;
+    }
+
+    function usernamePath(lower) {
+      return /databases/$(database)/documents/usernames/$(lower);
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    // Code d'invitation : 6 caractères sans ambiguïté (aligné avec CODE_ALPHABET dans src/lib/parties.ts).
+    function validCode(c) {
+      return c is string && c.matches('^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$');
+    }
+
+    function validEditionId(e) {
+      return e is string && e.matches('^[0-9]{4}$');
+    }
+
+    function validPartyName(n) {
+      return n is string && n.size() >= 2 && n.size() <= 40 && n.trim() == n;
+    }
+
+    function partyPath(p) {
+      return /databases/$(database)/documents/parties/$(p);
+    }
+
+    function partyData(p) {
+      return get(partyPath(p)).data;
+    }
+
+    function isMember(p) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/parties/$(p)/members/$(request.auth.uid));
+    }
+
+    function isOwner(p) {
+      return signedIn() && partyData(p).ownerUid == request.auth.uid;
+    }
+
+    // Admin de la party (son créateur) ou super admin.
+    function canManage(p) {
+      return isOwner(p) || isSuperAdmin();
+    }
+
+    function isOpen(p) {
+      return partyData(p).status == 'open';
+    }
+
+    // Après la fermeture (closed ou finished), les membres et le super admin voient tous les pronos.
+    // Avant, personne ne voit ceux des autres : ni l'admin de la party (il joue aussi), ni le super admin.
+    function isRevealed(p) {
+      return (isMember(p) || isSuperAdmin()) && partyData(p).status != 'open';
+    }
+
+    // ---------- Super admin ----------
+
+    match /admins/{uid} {
+      // Chacun peut seulement savoir s'il est super admin lui-même (useIsSuperAdmin).
+      allow get: if isSelf(uid);
+      allow list, write: if false;
+    }
+
+    // ---------- Profils et pseudos ----------
+
+    match /users/{uid} {
+      allow read: if signedIn();
+
+      // Le pseudo doit être réservé dans le même batch/transaction (usernames/{lower}).
+      allow create: if isSelf(uid)
+        && exactKeys(request.resource.data, ['displayName', 'displayNameLower', 'emoji', 'createdAt'])
+        && validName(request.resource.data.displayName)
+        && request.resource.data.displayNameLower == request.resource.data.displayName.lower()
+        && validEmoji(request.resource.data.emoji)
+        && request.resource.data.createdAt == request.time
+        && getAfter(usernamePath(request.resource.data.displayNameLower)).data.uid == uid;
+
+      // Changer de pseudo = réserver le nouveau ET libérer l'ancien dans la même écriture.
+      allow update: if isSelf(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['displayName', 'displayNameLower', 'emoji'])
+        && validName(request.resource.data.displayName)
+        && request.resource.data.displayNameLower == request.resource.data.displayName.lower()
+        && validEmoji(request.resource.data.emoji)
+        && (
+          request.resource.data.displayNameLower == resource.data.displayNameLower
+          || (
+            getAfter(usernamePath(request.resource.data.displayNameLower)).data.uid == uid
+            && !existsAfter(usernamePath(resource.data.displayNameLower))
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /usernames/{lower} {
+      // get seulement : vérifier qu'un pseudo est libre, sans pouvoir lister tout le monde.
+      allow get: if signedIn();
+      allow list: if false;
+
+      // create échoue si le document existe déjà (ce serait un update) : pseudo unique.
+      allow create: if signedIn()
+        && exactKeys(request.resource.data, ['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(userPath(request.auth.uid)).data.displayNameLower == lower;
+
+      allow update: if false;
+
+      // Libération de l'ancien pseudo lors d'un changement de pseudo.
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && getAfter(userPath(request.auth.uid)).data.displayNameLower != lower;
+    }
+
+    // ---------- Codes d'invitation ----------
+
+    // partyCodes/{code} -> { partyId, editionId }. L'id du document EST le code : unicité garantie
+    // (create échoue s'il existe). get seulement, pour rejoindre : impossible de lister les codes.
+    match /partyCodes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+
+      // Écrit dans le même batch que la party : à sa création (par son créateur), ou quand son
+      // admin change le code (régénération). Le code doit être celui de la party après écriture.
+      allow create: if signedIn()
+        && validCode(code)
+        && exactKeys(request.resource.data, ['partyId', 'editionId'])
+        && request.resource.data.partyId is string
+        && getAfter(partyPath(request.resource.data.partyId)).data.code == code
+        && getAfter(partyPath(request.resource.data.partyId)).data.editionId == request.resource.data.editionId
+        && (
+          (!exists(partyPath(request.resource.data.partyId))
+            && getAfter(partyPath(request.resource.data.partyId)).data.ownerUid == request.auth.uid)
+          || (exists(partyPath(request.resource.data.partyId))
+            && canManage(request.resource.data.partyId)
+            && partyData(request.resource.data.partyId).code != code)
+        );
+
+      allow update: if false;
+
+      // Libéré, dans le même batch, quand la party est supprimée ou que son code change ;
+      // par son admin ou le super admin.
+      allow delete: if isSuperAdmin()
+        || (canManage(resource.data.partyId)
+          && (!existsAfter(partyPath(resource.data.partyId))
+            || getAfter(partyPath(resource.data.partyId)).data.code != code));
+    }
+
+    // Requête collection group « mes adhésions » (members où uid == moi).
+    match /{path=**}/members/{memberUid} {
+      allow list: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // ---------- Parties ----------
+
+    match /parties/{p} {
+      allow get: if isMember(p) || isSuperAdmin();
+      allow list: if isSuperAdmin();
+
+      // Création : le créateur devient admin et membre ; le code est réservé dans le même batch.
+      allow create: if signedIn()
+        && exactKeys(request.resource.data,
+             ['editionId', 'name', 'ownerUid', 'code', 'status', 'eventCount', 'createdAt'])
+        && validEditionId(request.resource.data.editionId)
+        && validPartyName(request.resource.data.name)
+        && request.resource.data.ownerUid == request.auth.uid
+        && validCode(request.resource.data.code)
+        && request.resource.data.status == 'open'
+        && request.resource.data.eventCount == 0
+        && request.resource.data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/partyCodes/$(request.resource.data.code)).data.partyId == p
+        && existsAfter(/databases/$(database)/documents/parties/$(p)/members/$(request.auth.uid));
+
+      // Admin de la party ou super admin : renommer, changer de phase, transmettre le rôle d'admin.
+      // Changer de phase ou d'admin (jamais les deux à la fois) incrémente eventCount et écrit
+      // events/{n} dans le même batch. Le nouvel admin doit être membre.
+      // Changer de code : seul champ modifié, le nouveau partyCodes/{code} est créé et l'ancien
+      // supprimé dans le même batch (l'ancien lien d'invitation cesse de marcher).
+      allow update: if canManage(p)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['code'])
+        && validCode(request.resource.data.code)
+        && getAfter(/databases/$(database)/documents/partyCodes/$(request.resource.data.code)).data.partyId == p
+        && !existsAfter(/databases/$(database)/documents/partyCodes/$(resource.data.code));
+
+      allow update: if canManage(p)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'status', 'ownerUid', 'eventCount'])
+        && validPartyName(request.resource.data.name)
+        && request.resource.data.status in ['open', 'closed', 'finished']
+        && (
+          // renommage seul
+          (request.resource.data.status == resource.data.status
+            && request.resource.data.ownerUid == resource.data.ownerUid
+            && request.resource.data.eventCount == resource.data.eventCount)
+          // changement de phase
+          || (request.resource.data.status != resource.data.status
+            && request.resource.data.ownerUid == resource.data.ownerUid
+            && request.resource.data.eventCount == resource.data.eventCount + 1
+            && existsAfter(/databases/$(database)/documents/parties/$(p)/events/$(string(request.resource.data.eventCount))))
+          // transmission du rôle d'admin
+          || (request.resource.data.ownerUid != resource.data.ownerUid
+            && request.resource.data.status == resource.data.status
+            && request.resource.data.eventCount == resource.data.eventCount + 1
+            && exists(/databases/$(database)/documents/parties/$(p)/members/$(request.resource.data.ownerUid))
+            && existsAfter(/databases/$(database)/documents/parties/$(p)/events/$(string(request.resource.data.eventCount))))
+        );
+
+      // Suppression : admin de la party ou super admin (double confirmation dans l'interface).
+      allow delete: if canManage(p);
+
+      // ---------- Journal ----------
+
+      // events/{n} : création seule, cohérente avec la party écrite dans le même batch.
+      // type 'status' : from/to = phases ; type 'owner' : from/to = uid de l'ancien et du nouvel admin.
+      match /events/{n} {
+        allow read: if isMember(p) || isSuperAdmin();
+        allow create: if canManage(p)
+          && exactKeys(request.resource.data, ['type', 'from', 'to', 'by', 'at'])
+          && request.resource.data.by == request.auth.uid
+          && request.resource.data.at == request.time
+          && request.resource.data.from != request.resource.data.to
+          && string(getAfter(partyPath(p)).data.eventCount) == n
+          && (
+            (request.resource.data.type == 'status'
+              && request.resource.data.from == partyData(p).status
+              && request.resource.data.to == getAfter(partyPath(p)).data.status)
+            || (request.resource.data.type == 'owner'
+              && request.resource.data.from == partyData(p).ownerUid
+              && request.resource.data.to == getAfter(partyPath(p)).data.ownerUid)
+          );
+        allow update, delete: if false;
+      }
+
+      // ---------- Membres ----------
+
+      match /members/{uid} {
+        // Un membre voit les autres membres (et qui a déjà pronostiqué). Aucun code n'y est stocké.
+        allow get: if isSelf(uid) || isMember(p) || isSuperAdmin();
+        allow list: if isMember(p) || isSuperAdmin();
+
+        // Deux façons d'entrer : créer la party (dans le même batch), ou prouver qu'on connaît
+        // le code via joinProofs/{uid}, écrit dans le même batch puis supprimé par le client.
+        allow create: if isSelf(uid)
+          && exactKeys(request.resource.data, ['uid', 'editionId', 'joinedAt', 'hasPicked'])
+          && request.resource.data.uid == uid
+          && request.resource.data.joinedAt == request.time
+          // false à la première arrivée ; true si je reviens et que mon prono est resté.
+          && request.resource.data.hasPicked == exists(/databases/$(database)/documents/parties/$(p)/picks/$(uid))
+          && request.resource.data.editionId == getAfter(partyPath(p)).data.editionId
+          && (
+            (!exists(partyPath(p)) && getAfter(partyPath(p)).data.ownerUid == uid)
+            || getAfter(/databases/$(database)/documents/parties/$(p)/joinProofs/$(uid)).data.code
+               == partyData(p).code
+          );
+
+        // Seul changement possible : hasPicked passe à true, dans le batch d'un prono.
+        allow update: if isSelf(uid)
+          && isOpen(p)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hasPicked'])
+          && request.resource.data.hasPicked == true
+          && existsAfter(/databases/$(database)/documents/parties/$(p)/picks/$(uid));
+
+        // Quitter (soi-même) ou être retiré (par l'admin ou le super admin). L'admin ne peut ni
+        // partir ni être retiré : il transmet d'abord son rôle. Exception : la suppression de la
+        // party, où toutes les adhésions partent dans le même batch que la party.
+        allow delete: if (isSelf(uid) && uid != partyData(p).ownerUid)
+          || (canManage(p) && uid != partyData(p).ownerUid)
+          || (canManage(p) && !existsAfter(partyPath(p)));
+      }
+
+      // Preuve temporaire du code, écrite avec l'adhésion puis supprimée aussitôt par le client.
+      // Illisible par tous, auteur compris.
+      match /joinProofs/{uid} {
+        allow read: if false;
+        allow create, update: if isSelf(uid)
+          && exactKeys(request.resource.data, ['code'])
+          && request.resource.data.code is string
+          && request.resource.data.code.size() <= 64;
+        allow delete: if isSelf(uid) || isSuperAdmin();
+      }
+
+      // ---------- Résultats (saisis par l'admin de la party) ----------
+
+      match /results/{docId} {
+        allow read: if isMember(p) || isSuperAdmin();
+        allow write: if canManage(p)
+          && docId == 'live'
+          && request.resource.data.keys()
+               .hasOnly(['top15', 'top5', 'winner', 'firstRunnerUp', 'secondRunnerUp', 'updatedAt']);
+      }
+
+      // ---------- Pronos ----------
+
+      // Écriture d'un prono (création ou changement d'avis) avec le numéro de changement n.
+      // Le document pickHistory/{uid}_{n} doit être écrit dans le même batch, avec les mêmes
+      // valeurs et le même horodatage serveur. La candidate est vérifiée côté client contre les
+      // données embarquées ; un id inventé ne peut de toute façon gagner aucun trophée.
+      function validPickWrite(party, who, n) {
+        let d = request.resource.data;
+        let h = getAfter(/databases/$(database)/documents/parties/$(party)/pickHistory/$(who + '_' + string(n))).data;
+        return isMember(party)
+          && isOpen(party)
+          && exactKeys(d, ['candidateId', 'changeCount', 'updatedAt'])
+          && d.candidateId is string
+          && d.candidateId.matches('^[a-z0-9-]{1,64}$')
+          && d.changeCount is int
+          && d.changeCount == n
+          && d.updatedAt == request.time
+          && h.uid == who
+          && h.candidateId == d.candidateId
+          && h.changeCount == n
+          && h.at == request.time;
+      }
+
+      match /picks/{uid} {
+        allow get: if isSelf(uid) || isRevealed(p);
+        allow list: if isRevealed(p);
+
+        allow create: if isSelf(uid) && validPickWrite(p, uid, 1);
+        allow update: if isSelf(uid) && validPickWrite(p, uid, resource.data.changeCount + 1);
+        allow delete: if false;
+      }
+
+      match /pickHistory/{historyId} {
+        // Son propre historique toujours ; celui des autres seulement après la fermeture.
+        allow get, list: if isRevealed(p)
+          || (signedIn() && resource.data.uid == request.auth.uid);
+
+        // Création seulement, id = {uid}_{changeCount}, cohérente avec le prono écrit
+        // dans le même batch (même candidate, même compteur, même request.time).
+        allow create: if signedIn()
+          && exactKeys(request.resource.data, ['uid', 'candidateId', 'changeCount', 'at'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.changeCount is int
+          && request.resource.data.changeCount >= 1
+          && historyId == request.auth.uid + '_' + string(request.resource.data.changeCount)
+          && request.resource.data.at == request.time
+          && isMember(p)
+          && isOpen(p)
+          && getAfter(/databases/$(database)/documents/parties/$(p)/picks/$(request.auth.uid)).data.changeCount == request.resource.data.changeCount
+          && getAfter(/databases/$(database)/documents/parties/$(p)/picks/$(request.auth.uid)).data.candidateId == request.resource.data.candidateId
+          && getAfter(/databases/$(database)/documents/parties/$(p)/picks/$(request.auth.uid)).data.updatedAt == request.time;
+
+        allow update, delete: if false;
+      }
+    }
+  }
+}
