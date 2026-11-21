@@ -126,10 +126,12 @@ Règles de collaboration :
 - Données 2027 : `src/data/editions/2027/candidates.json` (31 candidates) et `public/candidates/2027/*.webp` (portrait `<id>.webp` et photo en pied `<id>-full.webp`)
 - `scripts/prep_data.py`, qui régénère ces données à partir des photos
 
-**En cours (jalon J1 Fondations), poussé sur la branche `wip/fondations`, non vérifié :**
-- Le travail partiel de l'agent Fondations : scaffold Vite/React/TS/PWA, `src/lib` (couche Firebase), `firestore.rules`, `firebase.json`, `.firebaserc`, les pages placeholder et le composant `Sash`
-- Le typecheck passait au moment du push. Le build, le lint et les tests de règles **ne sont pas vérifiés**
-- Si `docs/ARCHITECTURE.md` existe sur cette branche, sa section "Reste à faire" fait foi
+**Jalon J1 Fondations terminé sur la branche `wip/fondations` :**
+- Scaffold Vite/React/TS/PWA, `src/lib` complet (le contrat ; son API est détaillée dans `docs/ARCHITECTURE.md`), `firestore.rules`, `firebase.json`, `.firebaserc` (missfrancebet), le composant `Sash`, des pages placeholder, le README avec la mise en ligne pas à pas
+- `build`, `typecheck` et `lint` passent ; 7/7 tests unitaires passent
+- ⚠️ **Les 31 tests des règles Firestore sont écrits mais n'ont JAMAIS été exécutés, et les règles n'ont jamais été compilées.** Le téléchargement de l'émulateur était bloqué dans l'environnement cloud. C'est la **première chose à faire**, sur une machine qui a accès au réseau
+- Ajouts au modèle : `members.hasPicked`, pour compter les joueurs qui ont pronostiqué sans révéler leur choix ; le token `--color-text-muted: #4f5874`, pour le contraste
+- Limites connues et reste à faire : voir la section "Reste à faire" de `docs/ARCHITECTURE.md`. Les points principaux : pas de guard d'appartenance sur les routes (chaque écran doit vérifier `useMembership`), bundle de 895 kB à découper avec `React.lazy`, `Sash` jamais vu dans un navigateur
 
 **Pour reprendre (prochaine session) :**
 1. `git checkout wip/fondations && npm ci`

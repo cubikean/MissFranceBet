@@ -185,19 +185,19 @@ service cloud.firestore {
       // Écriture d'un prono (création ou changement d'avis) avec le numéro de changement n.
       // Le document pickHistory/{uid}_{n} doit être écrit dans le même batch, avec les mêmes
       // valeurs et le même horodatage serveur.
-      function validPickWrite(e, uid, n) {
+      function validPickWrite(ed, who, n) {
         let d = request.resource.data;
-        let h = getAfter(/databases/$(database)/documents/editions/$(e)/pickHistory/$(uid + '_' + string(n))).data;
-        return isMember(e)
-          && isOpen(e)
+        let h = getAfter(/databases/$(database)/documents/editions/$(ed)/pickHistory/$(who + '_' + string(n))).data;
+        return isMember(ed)
+          && isOpen(ed)
           && exactKeys(d, ['candidateId', 'changeCount', 'updatedAt'])
           && d.candidateId is string
           && d.candidateId.matches('^[a-z0-9-]{1,64}$')
-          && exists(/databases/$(database)/documents/editions/$(e)/candidates/$(d.candidateId))
+          && exists(/databases/$(database)/documents/editions/$(ed)/candidates/$(d.candidateId))
           && d.changeCount is int
           && d.changeCount == n
           && d.updatedAt == request.time
-          && h.uid == uid
+          && h.uid == who
           && h.candidateId == d.candidateId
           && h.changeCount == n
           && h.at == request.time;
