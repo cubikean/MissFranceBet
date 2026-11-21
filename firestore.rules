@@ -1,0 +1,241 @@
+rules_version = '2';
+
+// Règles de sécurité de Pronos Miss. Référence : docs/SPEC.md.
+// Principe : tout est refusé sauf ce qui est explicitement autorisé ci-dessous.
+// Les tests sont dans tests/rules/ (npm run test:rules).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // admins/{uid} est créé à la main dans la console, jamais par le client.
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function exactKeys(data, keys) {
+      return data.keys().hasOnly(keys) && data.keys().hasAll(keys);
+    }
+
+    function editionData(e) {
+      return get(/databases/$(database)/documents/editions/$(e)).data;
+    }
+
+    function isMember(e) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/editions/$(e)/members/$(request.auth.uid));
+    }
+
+    function isOpen(e) {
+      return editionData(e).status == 'open';
+    }
+
+    // Après la fermeture (closed ou finished), les membres voient tous les pronos.
+    function isRevealed(e) {
+      return isMember(e) && editionData(e).status != 'open';
+    }
+
+    function validName(n) {
+      return n is string
+        && n.size() >= 2 && n.size() <= 20
+        && n.trim() == n
+        && !n.matches('.*/.*');
+    }
+
+    function validEmoji(x) {
+      return x is string && x.size() >= 1 && x.size() <= 16;
+    }
+
+    function usernamePath(lower) {
+      return /databases/$(database)/documents/usernames/$(lower);
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    // ---------- Admins ----------
+
+    match /admins/{uid} {
+      // Chacun peut seulement savoir s'il est admin lui-même (useIsAdmin).
+      allow get: if isSelf(uid);
+      allow list, write: if false;
+    }
+
+    // ---------- Profils et pseudos ----------
+
+    match /users/{uid} {
+      allow read: if signedIn();
+
+      // Le pseudo doit être réservé dans le même batch/transaction (usernames/{lower}).
+      allow create: if isSelf(uid)
+        && exactKeys(request.resource.data, ['displayName', 'displayNameLower', 'emoji', 'createdAt'])
+        && validName(request.resource.data.displayName)
+        && request.resource.data.displayNameLower == request.resource.data.displayName.lower()
+        && validEmoji(request.resource.data.emoji)
+        && request.resource.data.createdAt == request.time
+        && getAfter(usernamePath(request.resource.data.displayNameLower)).data.uid == uid;
+
+      // Changer de pseudo = réserver le nouveau ET libérer l'ancien dans la même écriture.
+      allow update: if isSelf(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['displayName', 'displayNameLower', 'emoji'])
+        && validName(request.resource.data.displayName)
+        && request.resource.data.displayNameLower == request.resource.data.displayName.lower()
+        && validEmoji(request.resource.data.emoji)
+        && (
+          request.resource.data.displayNameLower == resource.data.displayNameLower
+          || (
+            getAfter(usernamePath(request.resource.data.displayNameLower)).data.uid == uid
+            && !existsAfter(usernamePath(resource.data.displayNameLower))
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /usernames/{lower} {
+      // get seulement : vérifier qu'un pseudo est libre, sans pouvoir lister tout le monde.
+      allow get: if signedIn();
+      allow list: if false;
+
+      // create échoue si le document existe déjà (ce serait un update) : pseudo unique.
+      allow create: if signedIn()
+        && exactKeys(request.resource.data, ['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(userPath(request.auth.uid)).data.displayNameLower == lower;
+
+      allow update: if false;
+
+      // Libération de l'ancien pseudo lors d'un changement de pseudo.
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && getAfter(userPath(request.auth.uid)).data.displayNameLower != lower;
+    }
+
+    // ---------- Code de soirée ----------
+
+    match /editionSecrets/{e} {
+      // Jamais lisible, même par l'admin : seules les règles le lisent via get().
+      allow read: if false;
+      allow create, update: if isAdmin()
+        && exactKeys(request.resource.data, ['code'])
+        && request.resource.data.code is string
+        && request.resource.data.code.size() >= 4;
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Éditions ----------
+
+    match /editions/{e} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        && exactKeys(request.resource.data, ['title', 'showAt', 'status', 'createdAt'])
+        && request.resource.data.title is string
+        && request.resource.data.showAt is timestamp
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.status in ['open', 'closed', 'finished'];
+      allow delete: if isAdmin();
+
+      match /members/{uid} {
+        // Un membre peut voir les autres membres (et qui a déjà pronostiqué).
+        // Le champ code n'est donc visible que de gens qui l'ont eux-mêmes saisi.
+        allow get: if isSelf(uid) || isMember(e) || isAdmin();
+        allow list: if isMember(e) || isAdmin();
+
+        // Rejoindre = prouver qu'on connaît le code (comparé au secret via get()).
+        allow create: if isSelf(uid)
+          && exactKeys(request.resource.data, ['joinedAt', 'code', 'hasPicked'])
+          && request.resource.data.joinedAt == request.time
+          && request.resource.data.hasPicked == false
+          && request.resource.data.code is string
+          && request.resource.data.code == get(/databases/$(database)/documents/editionSecrets/$(e)).data.code;
+
+        // Seul changement possible : hasPicked passe à true, dans le batch d'un prono.
+        allow update: if isSelf(uid)
+          && isOpen(e)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hasPicked'])
+          && request.resource.data.hasPicked == true
+          && existsAfter(/databases/$(database)/documents/editions/$(e)/picks/$(uid));
+
+        allow delete: if isAdmin();
+      }
+
+      match /candidates/{candidateId} {
+        allow read: if signedIn();
+        allow write: if isAdmin();
+      }
+
+      match /results/{docId} {
+        allow read: if signedIn();
+        allow write: if isAdmin() && docId == 'live';
+      }
+
+      // ---------- Pronos ----------
+
+      // Écriture d'un prono (création ou changement d'avis) avec le numéro de changement n.
+      // Le document pickHistory/{uid}_{n} doit être écrit dans le même batch, avec les mêmes
+      // valeurs et le même horodatage serveur.
+      function validPickWrite(e, uid, n) {
+        let d = request.resource.data;
+        let h = getAfter(/databases/$(database)/documents/editions/$(e)/pickHistory/$(uid + '_' + string(n))).data;
+        return isMember(e)
+          && isOpen(e)
+          && exactKeys(d, ['candidateId', 'changeCount', 'updatedAt'])
+          && d.candidateId is string
+          && d.candidateId.matches('^[a-z0-9-]{1,64}$')
+          && exists(/databases/$(database)/documents/editions/$(e)/candidates/$(d.candidateId))
+          && d.changeCount is int
+          && d.changeCount == n
+          && d.updatedAt == request.time
+          && h.uid == uid
+          && h.candidateId == d.candidateId
+          && h.changeCount == n
+          && h.at == request.time;
+      }
+
+      match /picks/{uid} {
+        // Avant la fermeture : chacun ne lit que son prono (l'admin voit tout).
+        allow get: if isSelf(uid) || isAdmin() || isRevealed(e);
+        allow list: if isAdmin() || isRevealed(e);
+
+        allow create: if isSelf(uid) && validPickWrite(e, uid, 1);
+        allow update: if isSelf(uid) && validPickWrite(e, uid, resource.data.changeCount + 1);
+        allow delete: if false;
+      }
+
+      match /pickHistory/{historyId} {
+        // Son propre historique toujours ; celui des autres seulement après la fermeture.
+        allow get, list: if isAdmin()
+          || isRevealed(e)
+          || (signedIn() && resource.data.uid == request.auth.uid);
+
+        // Création seulement, id = {uid}_{changeCount}, cohérente avec le prono écrit
+        // dans le même batch (même candidate, même compteur, même request.time).
+        allow create: if signedIn()
+          && exactKeys(request.resource.data, ['uid', 'candidateId', 'changeCount', 'at'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.changeCount is int
+          && request.resource.data.changeCount >= 1
+          && historyId == request.auth.uid + '_' + string(request.resource.data.changeCount)
+          && request.resource.data.at == request.time
+          && isMember(e)
+          && isOpen(e)
+          && getAfter(/databases/$(database)/documents/editions/$(e)/picks/$(request.auth.uid)).data.changeCount == request.resource.data.changeCount
+          && getAfter(/databases/$(database)/documents/editions/$(e)/picks/$(request.auth.uid)).data.candidateId == request.resource.data.candidateId
+          && getAfter(/databases/$(database)/documents/editions/$(e)/picks/$(request.auth.uid)).data.updatedAt == request.time;
+
+        allow update, delete: if false;
+      }
+    }
+  }
+}

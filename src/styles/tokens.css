@@ -1,0 +1,68 @@
+/* Tokens de docs/DESIGN.md. Toute valeur visuelle de l'app passe par ces variables. */
+:root {
+  /* Couleurs */
+  --color-ciel: #dceef4; /* fond principal */
+  --color-echarpe: #1d2b78; /* texte, écharpes, boutons principaux */
+  --color-satin: #ffffff; /* surfaces */
+  --color-or: #d9a21b; /* victoire uniquement */
+  --color-strass: #e0287d; /* action unique de l'écran, badge en direct */
+  --color-galet: #8c93a8; /* désactivé, éliminée, texte secondaire */
+  --color-argent: #a7b0be; /* trophée 🥈 */
+  --color-bronze: #b4703a; /* trophée 🥉 */
+
+  /* Dérivées */
+  --color-bg: var(--color-ciel);
+  --color-text: var(--color-echarpe);
+  --color-text-muted: #4f5874; /* Galet assombri : lisible sur Ciel en petit corps */
+  --color-surface: var(--color-satin);
+  --color-border: rgb(29 43 120 / 0.12); /* Écharpe à 12 % */
+  --color-focus: var(--color-strass);
+  --color-on-dark: #ffffff;
+
+  /* Polices */
+  --font-display: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+  --font-body: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sash: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+
+  /* Échelle typo : ratio 1.25, base 16 px */
+  --text-sm: 0.8rem; /* 12.8 */
+  --text-base: 1rem; /* 16 */
+  --text-md: 1.25rem; /* 20 */
+  --text-lg: 1.5625rem; /* 25 */
+  --text-xl: 1.953rem; /* 31.25 */
+  --text-2xl: 2.441rem; /* 39 */
+  --text-3xl: 3.052rem; /* 48.8 */
+
+  --leading-body: 1.5;
+  --leading-title: 1.1;
+  --measure: 65ch;
+
+  --weight-regular: 400;
+  --weight-semibold: 600;
+  --weight-title: 700; /* Fraunces 600–800 */
+  --sash-tracking: 0.06em;
+
+  /* Rayons hiérarchisés */
+  --radius-photo: 14px;
+  --radius-sheet: 20px;
+  --radius-pill: 999px;
+
+  /* Espacements (base 4 px) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* Divers */
+  --tap-target: 44px;
+  --sash-angle: -12deg;
+  --tabbar-height: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 280ms;
+}
