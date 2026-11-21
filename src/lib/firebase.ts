@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import {
   connectFirestoreEmulator,
@@ -30,6 +30,8 @@ export const app = initializeApp({
 })
 
 // App Check (gratuit) : Firebase refuse les requêtes qui ne viennent pas de cette app (bots, scripts).
+// Fournisseur reCAPTCHA Enterprise (Google Cloud Fraud Defense) : les clés v3 classiques ne se créent plus.
+// Sans facturation, 10 000 évaluations par mois gratuites, puis erreur 429 (jamais de facture).
 // Actif seulement si VITE_RECAPTCHA_SITE_KEY est renseignée ; l'appliquer se fait ensuite dans la
 // console (App Check > Firestore > Appliquer). Désactivé avec les émulateurs.
 // En local contre le vrai projet : VITE_APPCHECK_DEBUG=true, puis enregistre le jeton de débogage
@@ -39,7 +41,7 @@ if (!usingEmulators && env.VITE_RECAPTCHA_SITE_KEY) {
     ;(self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true
   }
   initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider(env.VITE_RECAPTCHA_SITE_KEY),
+    provider: new ReCaptchaEnterpriseProvider(env.VITE_RECAPTCHA_SITE_KEY),
     isTokenAutoRefreshEnabled: true,
   })
 }

@@ -90,6 +90,10 @@ Tout est gratuit sur le plan Spark. Compte Google nécessaire.
 
 Pour les mises à jour suivantes : `npm run build && npx firebase deploy`.
 
-**Protection contre les bots (App Check, gratuit)** : dans la console Firebase > App Check, enregistre l'app web avec le fournisseur reCAPTCHA v3 (crée la clé sur https://www.google.com/recaptcha/admin, domaine `missfrancebet.web.app`). Mets la clé de site dans `VITE_RECAPTCHA_SITE_KEY` (`.env.local`), redéploie, vérifie que tout marche, puis dans App Check > API > Cloud Firestore, clique sur « Appliquer ». En local contre le vrai projet, mets `VITE_APPCHECK_DEBUG=true` et enregistre le jeton de débogage affiché dans la console du navigateur.
+**Protection contre les bots (App Check, gratuit)** : les clés reCAPTCHA v3 « classiques » ne se créent plus, on utilise reCAPTCHA Enterprise (dans la console Google Cloud, le produit s'appelle « Fraud Defense »). Aucune facturation n'est nécessaire : 10 000 évaluations par mois sont gratuites, au-delà les requêtes échouent (erreur 429) jusqu'au mois suivant, sans jamais rien facturer.
+1. Console Google Cloud, projet `missfrancebet` > **Fraud Defense** (https://console.cloud.google.com/security/recaptcha). Active l'API reCAPTCHA Enterprise si la console le demande.
+2. **Create key** : type d'application **Web**, domaine `missfrancebet.web.app` (jamais `localhost`), vérification de domaine laissée active, **sans** case à cocher ni défis (App Check veut une clé à score).
+3. Console Firebase > App Check > Apps : enregistre l'app web avec le fournisseur **reCAPTCHA Enterprise** et colle la clé. Monte la durée de vie du jeton (par exemple 1 jour) : moins d'évaluations consommées.
+4. Mets la clé dans `VITE_RECAPTCHA_SITE_KEY` (`.env.local`), redéploie, vérifie que tout marche (les métriques App Check doivent montrer des requêtes vérifiées), puis dans App Check > API > Cloud Firestore, clique sur « Appliquer ». En local contre le vrai projet, mets `VITE_APPCHECK_DEBUG=true` et enregistre le jeton de débogage affiché dans la console du navigateur.
 
 **Après chaque soirée** : dans l'onglet Admin (super admin), clique sur « Télécharger une sauvegarde » et garde le fichier JSON. Le plan gratuit ne fait aucune sauvegarde automatique.
