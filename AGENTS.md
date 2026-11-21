@@ -119,6 +119,25 @@ Règles de collaboration :
 | J6 | Soirée : le porteur pilote le back-office pendant l'émission | 12/12 |
 | Plus tard | Idées hors périmètre V1 (à ne pas faire sans accord) : co-admin, plusieurs groupes d'amis, pronos sur le top 5, mode TV plein écran, notifications push | — |
 
+## 9 bis. État du projet et reprise (mis à jour le 21/11/2026, 15h45)
+
+**Fait et poussé sur `dev` :**
+- Cadrage complet : ce fichier, `docs/SPEC.md`, `docs/DESIGN.md`
+- Données 2027 : `src/data/editions/2027/candidates.json` (31 candidates) et `public/candidates/2027/*.webp` (portrait `<id>.webp` et photo en pied `<id>-full.webp`)
+- `scripts/prep_data.py`, qui régénère ces données à partir des photos
+
+**En cours (jalon J1 Fondations), poussé sur la branche `wip/fondations`, non vérifié :**
+- Le travail partiel de l'agent Fondations : scaffold Vite/React/TS/PWA, `src/lib` (couche Firebase), `firestore.rules`, `firebase.json`, `.firebaserc`, les pages placeholder et le composant `Sash`
+- Le typecheck passait au moment du push. Le build, le lint et les tests de règles **ne sont pas vérifiés**
+- Si `docs/ARCHITECTURE.md` existe sur cette branche, sa section "Reste à faire" fait foi
+
+**Pour reprendre (prochaine session) :**
+1. `git checkout wip/fondations && npm ci`
+2. Vérifier `npm run typecheck && npm run lint && npm run build`, puis `npm run test:rules` (émulateur Firestore, Java requis)
+3. Relire `firestore.rules` point par point face à la section 6 ci-dessus, et compléter les tests manquants dans `tests/rules/`
+4. Fusionner dans `dev`, puis lancer **en parallèle** l'agent Front joueur et l'agent Back-office (section 8), avec `src/lib` comme contrat
+5. Agent QA, puis mise en ligne. Le porteur doit d'abord créer le projet Firebase `missfrancebet` (plan Spark), en suivant le README
+
 ## 10. Préparer l'édition suivante (2028 et après)
 
 1. Récupérer la liste des candidates (une Sheet à jour) et leurs photos (zip).
