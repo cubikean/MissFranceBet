@@ -16,7 +16,7 @@ Les photos officielles montrent chaque candidate avec une écharpe bleu marine o
 | Ciel de studio | `#DCEEF4` | fond principal (repris du décor bleu ciel des photos) |
 | Écharpe | `#1D2B78` | texte principal, écharpes, boutons principaux |
 | Satin | `#FFFFFF` | surfaces (fiches, feuilles) |
-| Or couronne | `#D9A21B` | trophée 🥇, écharpe gagnante, uniquement pour la victoire |
+| Or couronne | `#D9A21B` | trophée 🥇, écharpe gagnante, uniquement pour la victoire ; seule exception, le « Miss France » de l'icône de l'app |
 | Strass | `#E0287D` | action unique de l'écran (Choisir / Fermer les pronos) et badge "en direct" |
 | Galet | `#8C93A8` | états désactivés, écharpes éliminées, texte secondaire |
 
@@ -27,6 +27,7 @@ Ratios de contraste vérifiés : Écharpe sur Ciel ≥ 10:1. Le blanc sur Strass
 - **Fraunces** (variable, opsz + SOFT 50, wght 600–800) : titres, noms des candidates. Ses formes molles et un peu kitsch rappellent la soirée glamour sans tomber dans l'éditorial.
 - **Bricolage Grotesque** (400/600) : interface et texte courant.
 - **Barlow Condensed** 700 en capitales, espacement +0.06em : **uniquement** dans l'écharpe.
+- **Ephesis** (manuscrite, OFL) : **uniquement** le « Miss France » de l'icône (`public/icons/*.svg`, `public/favicon.svg`), vectorisé dans le SVG ; elle n'est pas chargée par l'app.
 
 Échelle (ratio 1.25, base 16 px) : 12.8 / 16 / 20 / 25 / 31.25 / 39 / 48.8. Interligne 1.5 pour le texte courant, 1.1 pour les titres. Lignes de 65 caractères maximum.
 Les polices sont auto-hébergées avec `@fontsource`, pour que l'app fonctionne hors ligne (PWA).
