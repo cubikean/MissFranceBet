@@ -58,9 +58,7 @@ export function ProfilePage() {
 export { PartyAdminPage } from './PartyAdminPage'
 
 /** Super admin : toutes les parties. */
-export function AdminPage() {
-  return <Placeholder title="Super admin" route="/admin" />
-}
+export { AdminPage } from './AdminPage'
 
 export function NotFoundPage() {
   return <Placeholder title="Page introuvable" route="404" />
