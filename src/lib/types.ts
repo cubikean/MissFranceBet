@@ -38,6 +38,11 @@ export interface CandidatesFile {
   candidates: Candidate[]
 }
 
+/**
+ * Phase d'une party vivante. En base, une party supprimée garde son document avec le statut
+ * 'deleted' (pierre tombale, DELETED_STATUS dans parties.ts) : la couche données la traite comme
+ * inexistante, si bien qu'une `Party` n'a jamais ce statut.
+ */
 export type PartyStatus = 'open' | 'closed' | 'finished'
 
 /**

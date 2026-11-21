@@ -49,6 +49,23 @@ export const PARTY_NAME_MAX = 40
 
 // ---------- Conversions ----------
 
+/**
+ * Statut d'une party supprimée : le document reste en base (pierre tombale) pour que son id ne
+ * puisse pas être recréé. Elle n'est lisible que par le super admin, et la couche données la
+ * traite comme inexistante : elle n'apparaît jamais comme une `Party`.
+ */
+export const DELETED_STATUS = 'deleted'
+
+/** true si les données lues sont celles d'une party supprimée (pierre tombale). */
+export function isDeletedParty(d: DocumentData | undefined): boolean {
+  return d?.status === DELETED_STATUS
+}
+
+/** Party lue, ou null si elle n'existe pas ou a été supprimée (pierre tombale). */
+function livePartyOf(id: string, d: DocumentData | undefined): Party | null {
+  return d && !isDeletedParty(d) ? toParty(id, d) : null
+}
+
 export function toParty(id: string, d: DocumentData): Party {
   return {
     id,
@@ -147,7 +164,10 @@ export async function joinParty(rawCode: string): Promise<string> {
 
 // ---------- Lecture ----------
 
-/** Une party (null si elle n'existe pas ; erreur permission-denied si je n'en suis pas membre). */
+/**
+ * Une party (null si elle n'existe pas ou a été supprimée ; erreur permission-denied si je n'en
+ * suis pas membre).
+ */
 export function useParty(partyId: string | null): Live<Party | null> {
   const { user } = useAuth()
   return useSnapshot<Party | null>(
@@ -155,7 +175,7 @@ export function useParty(partyId: string | null): Live<Party | null> {
     (next, fail) =>
       onSnapshot(
         doc(db, 'parties', partyId!),
-        (s) => next(s.exists() ? toParty(s.id, s.data({ serverTimestamps: 'estimate' })) : null),
+        (s) => next(livePartyOf(s.id, s.data({ serverTimestamps: 'estimate' }))),
         fail,
       ),
     null,
@@ -182,7 +202,9 @@ export function useMyMemberships(): Live<Membership[]> {
 
 /**
  * Mes parties (filtrées sur une édition si editionId est donné), les plus récentes d'abord.
- * Combine mes adhésions et un abonnement à chaque party.
+ * Combine mes adhésions et un abonnement à chaque party. Une party supprimée disparaît : son
+ * adhésion part dans le même batch, et si son abonnement est refusé entre-temps (party devenue
+ * illisible), elle est simplement retirée de la liste.
  */
 export function useMyParties(editionId?: string | null): Live<Party[]> {
   const { user } = useAuth()
@@ -220,21 +242,32 @@ export function useMyParties(editionId?: string | null): Live<Party[]> {
           for (const id of ids) {
             if (inner.has(id)) continue
             let first = true
+            const loaded = () => {
+              if (first) {
+                first = false
+                pending -= 1
+                if (pending === 0) ready = true
+              }
+              emit()
+            }
             inner.set(
               id,
               onSnapshot(
                 doc(db, 'parties', id),
                 (p) => {
-                  if (p.exists()) parties.set(id, toParty(id, p.data({ serverTimestamps: 'estimate' })))
+                  const party = livePartyOf(id, p.data({ serverTimestamps: 'estimate' }))
+                  if (party) parties.set(id, party)
                   else parties.delete(id)
-                  if (first) {
-                    first = false
-                    pending -= 1
-                    if (pending === 0) ready = true
-                  }
-                  emit()
+                  loaded()
                 },
-                fail,
+                (error) => {
+                  if (!isPermissionDenied(error)) return fail(error)
+                  // Party supprimée (ou adhésion retirée) pendant l'écoute : elle disparaît.
+                  // L'écoute est close ; on l'oublie pour la rouvrir si l'adhésion revient.
+                  inner.delete(id)
+                  parties.delete(id)
+                  loaded()
+                },
               ),
             )
           }
@@ -297,7 +330,10 @@ export function usePartyEvents(partyId: string | null): Live<PartyEvent[]> {
   )
 }
 
-/** Toutes les parties (super admin uniquement), les plus récentes d'abord. */
+/**
+ * Toutes les parties (super admin uniquement), les plus récentes d'abord. Les parties supprimées
+ * (pierres tombales) n'y figurent pas ; elles restent dans la sauvegarde JSON.
+ */
 export function useAllParties(enabled: boolean): Live<Party[]> {
   const { user } = useAuth()
   return useSnapshot<Party[]>(
@@ -305,7 +341,13 @@ export function useAllParties(enabled: boolean): Live<Party[]> {
     (next, fail) =>
       onSnapshot(
         query(collection(db, 'parties'), orderBy('createdAt', 'desc')),
-        (s) => next(s.docs.map((d) => toParty(d.id, d.data({ serverTimestamps: 'estimate' })))),
+        (s) =>
+          next(
+            s.docs.flatMap((d) => {
+              const party = livePartyOf(d.id, d.data({ serverTimestamps: 'estimate' }))
+              return party ? [party] : []
+            }),
+          ),
         fail,
       ),
     [],

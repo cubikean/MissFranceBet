@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { requireUid, useAuth } from './auth'
-import { AppError } from './errors'
+import { AppError, isPermissionDenied } from './errors'
 import { toDate, useSnapshot } from './live'
 import type { Live, UserProfile } from './types'
 
@@ -21,6 +21,13 @@ export function normalizeUsername(name: string): string {
   return name.trim().replace(/\s+/g, ' ')
 }
 
+/**
+ * Caractères de contrôle (Cc : retour à la ligne, tabulation…) et de format invisibles (Cf :
+ * espace de largeur nulle, trait d'union conditionnel, liant des emojis composés…), refusés
+ * aussi par validName dans firestore.rules.
+ */
+const INVISIBLE_CHARS = /[\p{Cc}\p{Cf}]/u
+
 /** Message d'erreur si le pseudo est invalide, sinon null (mêmes contraintes que les règles). */
 export function usernameError(name: string): string | null {
   const n = normalizeUsername(name)
@@ -28,6 +35,9 @@ export function usernameError(name: string): string | null {
   if (len < USERNAME_MIN) return `Ton pseudo doit faire au moins ${USERNAME_MIN} caractères.`
   if (len > USERNAME_MAX) return `Ton pseudo doit faire au plus ${USERNAME_MAX} caractères.`
   if (n.includes('/')) return 'Ton pseudo ne peut pas contenir de « / ».'
+  if (INVISIBLE_CHARS.test(n)) {
+    return 'Ton pseudo contient un caractère invisible (retour à la ligne, espace de largeur nulle…). Retape-le sans.'
+  }
   if (/^__.*__$/.test(n) || n === '.' || n === '..') return 'Choisis un autre pseudo.'
   return null
 }
@@ -121,12 +131,15 @@ export async function claimUsername(displayName: string, photo?: string | null):
   const nameRef = doc(db, 'usernames', lower)
   const userRef = doc(db, 'users', uid)
 
+  const taken = new AppError('username-taken', `Le pseudo « ${name} » est déjà pris. Choisis-en un autre.`)
   await runTransaction(db, async (tx) => {
-    const nameSnap = await tx.get(nameRef)
+    // Les règles ne laissent lire usernames/{pseudo} que s'il est libre ou à moi : un refus
+    // veut dire qu'il appartient à quelqu'un d'autre (sans révéler à qui).
+    const nameSnap = await tx.get(nameRef).catch((error: unknown) => {
+      throw isPermissionDenied(error) ? taken : error
+    })
     const userSnap = await tx.get(userRef)
-    if (nameSnap.exists() && nameSnap.data().uid !== uid) {
-      throw new AppError('username-taken', `Le pseudo « ${name} » est déjà pris. Choisis-en un autre.`)
-    }
+    if (nameSnap.exists() && nameSnap.data().uid !== uid) throw taken
     if (!userSnap.exists()) {
       tx.set(nameRef, { uid })
       tx.set(userRef, { displayName: name, displayNameLower: lower, photo: photo ?? null, createdAt: serverTimestamp() })

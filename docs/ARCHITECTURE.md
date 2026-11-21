@@ -25,6 +25,7 @@ src/
   data/editions/2027/edition.json     titre + date de l'émission
   data/editions/2027/candidates.json  (généré, ne pas toucher)
 tests/rules/firestore.test.ts  tests des règles (émulateur)
+tests/rules/qa-triche.test.ts  revue QA : tentatives de triche (failles corrigées + pistes qui tiennent)
 ```
 
 ## Routes
@@ -44,13 +45,13 @@ Auth (`auth.ts`)
 - `requireUid(): string`, `prefersRedirect(): boolean`
 
 Profil (`profile.ts`)
-- `claimUsername(displayName, photo?): Promise<void>` — transaction, crée le profil ou change de pseudo ; `AppError('username-taken' | 'username-invalid')`
+- `claimUsername(displayName, photo?): Promise<void>` — transaction, crée le profil ou change de pseudo ; `AppError('username-taken' | 'username-invalid')`. La lecture de `usernames/{pseudo}` est refusée s'il appartient à un autre : ce refus est traduit en `username-taken`
 - `updateProfile(current: UserProfile, patch: { displayName?; photo? }): Promise<void>`, `setProfilePhoto(photo | null)`
 - `photoFromFile(file): Promise<dataUrl>` — carré de `PHOTO_SIZE` (256) px, WebP (JPEG sur Safari), sous `PHOTO_MAX_CHARS` (100 000) ; `AppError('photo-invalid')`
 - `useProfile(uid?: string | null): Live<UserProfile | null>` (défaut : moi)
 - `useUsers(uids | 'all'): Live<Record<uid, UserProfile>>` — lus un par un ('all' : super admin seulement) ; pour une party, préférer `usePartyUsers(partyId)` (membres + auteurs du journal)
 - Composants : `<Avatar profile size />` (photo ou initiale), `<PhotoPicker value name onChange />` (Parcourir / Prendre une photo)
-- `usernameError(name): string | null`, `normalizeUsername(name)`, `USERNAME_MIN/MAX`
+- `usernameError(name): string | null` (refuse aussi les caractères de contrôle et invisibles `\p{Cc}` / `\p{Cf}`, comme `validName` dans les règles), `normalizeUsername(name)`, `USERNAME_MIN/MAX`
 
 Éditions et candidates embarquées (`editions.ts`, `candidates.ts`)
 - `listEditions(): Edition[]` (plus récente d'abord), `currentEdition(): Edition | null`, `getEdition(id): Edition | null`
@@ -59,11 +60,12 @@ Profil (`profile.ts`)
 Parties (`parties.ts`)
 - `createParty(editionId, name): Promise<{ partyId; code }>` — batch party + partyCodes + mon adhésion ; réessaie si collision de code ; `AppError('party-invalid')`
 - `joinParty(code): Promise<partyId>` — `AppError('wrong-code')` ; sans effet si déjà membre ; preuve + adhésion en batch, puis suppression de la preuve
-- `useParty(partyId): Live<Party | null>` (membres et super admin)
-- `useMyParties(editionId?): Live<Party[]>`, `useMyMemberships(): Live<Membership[]>` (collection group `members` où `uid == moi`)
+- `useParty(partyId): Live<Party | null>` (membres et super admin ; null si absente ou supprimée)
+- `useMyParties(editionId?): Live<Party[]>`, `useMyMemberships(): Live<Membership[]>` (collection group `members` où `uid == moi`). Une party supprimée, ou dont l'écoute devient refusée (permission-denied), sort de la liste sans mettre le hook en erreur
+- `DELETED_STATUS` (`'deleted'`), `isDeletedParty(data)` : pierre tombale d'une party supprimée. Les hooks ne renvoient jamais une `Party` supprimée (`PartyStatus` ne contient pas `'deleted'`)
 - `useMembership(partyId): Live<Membership | null>` (moi), `useMembers(partyId): Live<Membership[]>`
 - `usePartyEvents(partyId): Live<PartyEvent[]>` (journal des phases)
-- `useAllParties(enabled): Live<Party[]>` (super admin : passer `useIsSuperAdmin().data`)
+- `useAllParties(enabled): Live<Party[]>` (super admin : passer `useIsSuperAdmin().data`) ; sans les parties supprimées
 - `useActiveParty(): Live<Party | null>` : **point d'entrée des onglets** (party active de l'édition en cours, sinon la plus récente ; null = aucune party → proposer `/parties`)
 - `useActivePartyId(): string | null`, `setActivePartyId(id | null)` (localStorage, par appareil)
 - `canManageParty(party, uid, isSuperAdmin): boolean`
@@ -79,37 +81,38 @@ Résultats et logique de jeu (`results.ts`, `game.ts`, `trophies.ts`)
 - `useResults(partyId): Live<Results>` (`EMPTY_RESULTS` si rien)
 - `candidateStatus(candidateId, party, results): CandidateStatus` — 'neutral' | 'inRace' | 'eliminated' | 'winner' | 'firstRunnerUp' | 'secondRunnerUp'
 - `trophyFor(pick, results): 'gold' | 'silver' | 'bronze' | null`
-- `useMyTrophies(): Live<{ party; edition; candidateId; trophy }[]>` (parties finished)
+- `useMyTrophies(): Live<{ party; edition; candidateId; trophy }[]>` (parties finished ; une party supprimée ou devenue illisible disparaît sans erreur)
+- Composant `<ResultsEditor partyId editionId results readOnly? onPodiumSaved? />` : saisie top 15 / top 5 / podium en phase `closed` ; `readOnly` (phase `finished`) affiche les résultats sans saisie
 
 Administration (`admin.ts`) — admin de la party ou super admin, sauf mention
 - `useIsSuperAdmin(): Live<boolean>`
 - `setPartyStatus(party: Party, status)` — batch party + events/{n} (type 'status')
 - `transferOwnership(party: Party, newOwnerUid)` — batch party + events/{n} (type 'owner') ; le nouvel admin doit être membre
-- `renameParty(partyId, name)`, `removeMember(partyId, uid)`, `setResults(partyId, patch)` (fusion, `null` efface)
+- `renameParty(partyId, name)` (le nom doit changer : une écriture identique est refusée), `removeMember(partyId, uid)`, `setResults(partyId, patch)` (fusion, `null` efface ; phase `closed` seulement)
 - `regenerateCode(party): Promise<code>` — nouveau partyCodes + suppression de l'ancien + party.code, en un batch ; l'ancien lien cesse de marcher
 - `leaveParty(party)` — n'importe quel membre sauf l'admin ; réinitialise la party active. **L'interface confirme d'abord (popup)**
-- `deleteParty(party, typedPhrase)` — refuse si `deletePhraseMatches(typedPhrase)` est faux ; batch adhésions + code + party. `DELETE_PARTY_PHRASE` = « je confirme la suppression de la party » (champ à recopier, bouton désactivé tant que ça ne correspond pas)
-- `exportBackup(): Promise<object>`, `downloadBackup()` — super admin : fichier JSON de sauvegarde
+- `deleteParty(party, typedPhrase)` — refuse si `deletePhraseMatches(typedPhrase)` est faux ; batch : suppression des adhésions et du code, party passée en pierre tombale (`status: 'deleted'`, `deletedAt`). `DELETE_PARTY_PHRASE` = « je confirme la suppression de la party » (champ à recopier, bouton désactivé tant que ça ne correspond pas)
+- `exportBackup(): Promise<object>`, `downloadBackup()` — super admin : fichier JSON de sauvegarde (pierres tombales comprises, sans leurs pronos)
 
 Erreurs (`errors.ts`) : `errorMessage(err): string` (français, prêt à afficher), `AppError`, `isPermissionDenied`.
 
 ## Garanties des règles (firestore.rules)
 
-Chaque point est couvert par `tests/rules/firestore.test.ts` (78 tests, vérifiés aussi par mutation : casser une règle fait échouer un test).
+Chaque point est couvert par `tests/rules/firestore.test.ts` (101 tests) et `tests/rules/qa-triche.test.ts` (37 tentatives de triche de la revue QA), soit 138 tests, vérifiés aussi par mutation : casser une règle fait échouer un test.
 
 - Création de party : le créateur est `ownerUid`, statut `open`, `eventCount == 0`, `createdAt == request.time`, code au bon format, `partyCodes/{code}` réservé dans le même batch (create échoue si le code existe), adhésion du créateur dans le même batch. Impossible d'ajouter un second code à une party existante.
 - `partyCodes` : get pour tout connecté, list interdit, jamais modifié. Créé dans le batch de création de la party ou de changement de code ; supprimé dans le batch de suppression de la party ou de changement de code (par l'admin ou le super admin). Changer le code : seul champ modifié de la party, nouveau code créé et ancien supprimé dans le même batch.
-- Rejoindre : `members/{uid}` ne se crée que par soi-même, avec `editionId` égal à celui de la party, `hasPicked == false`, et soit en créant la party, soit avec `joinProofs/{uid}` (même batch) dont le code égale celui de la party. La preuve est illisible par tous.
+- Rejoindre : `members/{uid}` ne se crée que par soi-même, avec `editionId` égal à celui de la party, `hasPicked == false`, et soit en créant la party, soit avec `joinProofs/{uid}` (même batch) dont le code égale celui de la party, non supprimée. La preuve est illisible par tous, et ne s'écrit que sous une party existante et non supprimée, par un non-membre.
 - Lecture d'une party et de ses membres : membres et super admin. Liste de toutes les parties : super admin. Collection group `members` : seulement ses propres adhésions (`uid == moi`).
-- Phases et transmission : admin de la party ou super admin ; changer de statut **ou** d'admin (jamais les deux) incrémente `eventCount` et exige `events/{n}` dans le même batch (type, from = ancienne valeur, to = nouvelle, by = moi, at = request.time). Le nouvel admin doit être membre. Journal immuable, lisible des membres. `code`, `editionId`, `createdAt` immuables.
-- Suppression d'une party : admin de la party ou super admin ; son code et les adhésions ne peuvent être supprimés par l'admin que dans le même batch que la party.
+- Phases et transmission : admin de la party ou super admin ; changer de statut **ou** d'admin (jamais les deux) incrémente `eventCount` et exige `events/{n}` dans le même batch (type, from = ancienne valeur, to = nouvelle, by = moi, at = request.time). Le nouvel admin doit être membre avant et après le batch. Renommer exige un nouveau nom (pas d'écriture à vide). Journal immuable, lisible des membres. `code`, `editionId`, `createdAt` immuables.
+- Suppression d'une party (pierre tombale) : admin de la party ou super admin. `delete` est interdit à tous ; la suppression est un update vers `status: 'deleted'` (+ `deletedAt == request.time`, aucun autre champ), dans le même batch que la suppression de `partyCodes/{code}` et de l'adhésion de l'admin (l'app retire toutes les adhésions). Le code et les adhésions ne peuvent être supprimés par l'admin que dans ce batch (ou celui d'un changement de code). Une pierre tombale : id impossible à recréer (create ne s'applique qu'à un document absent), aucune écriture sur elle ni dans ses sous-collections (phase, nom, code, journal, résultats, pronos, adhésions, preuves ; seul le retrait d'une adhésion restée là est permis), lisible seulement par le super admin (party, membres, journal, résultats), pronos lisibles par personne (sauf son propre prono).
 - Pronos : écrits par leur propriétaire seulement, membre, party `open`, clés exactes, `candidateId` au format `[a-z0-9-]`, `updatedAt == request.time`, `changeCount` = 1 à la création puis ancien + 1 ; `getAfter(pickHistory/{uid}_{n})` cohérent. Suppression interdite à tous.
 - Historique : création seule, id `{uid}_{changeCount}`, cohérent avec le prono du même batch. Ni update ni delete.
-- Lecture des pronos : son prono et son historique toujours ; ceux des autres seulement après la fermeture, par les membres et le super admin. **Avant, personne** (ni l'admin de la party, ni le super admin).
-- members : `hasPicked` à la création = existence de mon prono (vrai si je reviens après avoir quitté) ; seule mise à jour : `hasPicked → true` dans un batch de prono, party ouverte. Quitter : soi-même, sauf l'admin. Retrait : admin de la party ou super admin, jamais l'admin.
-- Résultats : écriture admin de la party ou super admin, document `live` seulement, champs connus ; lecture membres et super admin.
+- Lecture des pronos : son prono et son historique toujours ; ceux des autres seulement après la fermeture (`closed` ou `finished`), par les membres et le super admin. **Avant, personne** (ni l'admin de la party, ni le super admin).
+- members : `hasPicked` à la création = existence de mon prono (vrai si je reviens après avoir quitté) ; seule mise à jour : `hasPicked → true` dans un batch de prono, party ouverte. Quitter : soi-même, sauf l'admin. Retrait : admin de la party ou super admin, jamais l'admin. « L'admin » s'entend avant et après le batch : impossible de transmettre le rôle et de retirer (ou faire partir) le nouvel ou l'ancien admin dans la même écriture.
+- Résultats : écriture admin de la party ou super admin, document `live` seulement, **phase `closed` seulement** ; `validResults()` : champs connus, `top15` null ou 1 à 15 ids distincts, `top5` null ou 1 à 5, podium null ou un id, ids au format `^[a-z0-9-]{1,64}$`, `updatedAt == request.time`. Lecture membres et super admin.
 - `admins` : jamais écrit par le client, lecture de son propre doc.
-- Pseudos : `usernames/{lower}` créé seulement si `users/{uid}.displayNameLower` correspond après écriture ; jamais mis à jour ; libéré uniquement par son propriétaire en changeant de pseudo. `users` modifiable par son propriétaire seulement.
+- Pseudos : `usernames/{lower}` lisible seulement s'il est libre ou à soi (pas d'uid à tirer d'un pseudo) ; créé seulement si `users/{uid}.displayNameLower` correspond après écriture ; jamais mis à jour ; libéré uniquement par son propriétaire en changeant de pseudo. `validName` refuse « / » et les caractères `\p{Cc}` et `\p{Cf}` (contrôle, invisibles). `users` modifiable par son propriétaire seulement.
 
 ## Conventions
 
@@ -124,7 +127,7 @@ Chaque point est couvert par `tests/rules/firestore.test.ts` (78 tests, vérifi�
 ## Tests
 
 - `npm run test:unit` : `src/**/*.test.ts` (fonctions pures).
-- `npm run test:rules` : `firebase emulators:exec --only firestore` + vitest projet `rules` (tests/rules).
+- `npm run test:rules` : `firebase emulators:exec --only firestore` + vitest projet `rules` (tests/rules). Les tests lisent l'hôte et le port dans `FIRESTORE_EMULATOR_HOST` (posé par `emulators:exec`, repli `127.0.0.1:8080`) : pour ne pas gêner un émulateur déjà lancé, passer un autre `firebase.json` avec `--config` (port Firestore, hub et websocket différents, `ui` désactivée).
 
 ## Reste à faire
 
