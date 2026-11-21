@@ -234,6 +234,55 @@ describe('code de soirée', () => {
   })
 })
 
+describe('membres et hasPicked', () => {
+  const member = (uid: string) => doc(dbAs(uid), 'editions', E, 'members', uid)
+
+  it('refuse de rejoindre avec hasPicked déjà à true', async () => {
+    await assertFails(
+      setDoc(doc(dbAs('carol'), 'editions', E, 'members', 'carol'), { joinedAt: serverTimestamp(), code: CODE, hasPicked: true }),
+    )
+  })
+
+  it('refuse de passer hasPicked à true sans prono', async () => {
+    await assertFails(updateDoc(member('alice'), { hasPicked: true }))
+  })
+
+  it('refuse de remettre hasPicked à false après un prono', async () => {
+    await assertSucceeds(pick(dbAs('alice'), 'alice', 'corse', 1))
+    await assertFails(updateDoc(member('alice'), { hasPicked: false }))
+  })
+
+  it('refuse de modifier son code ou sa date d’arrivée', async () => {
+    await assertFails(updateDoc(member('alice'), { code: 'AUTRE' }))
+    await assertFails(updateDoc(member('alice'), { joinedAt: serverTimestamp() }))
+  })
+
+  it('refuse de toucher à hasPicked après la fermeture', async () => {
+    await assertSucceeds(pick(dbAs('alice'), 'alice', 'corse', 1))
+    await setStatusRaw('closed')
+    await assertFails(updateDoc(member('alice'), { hasPicked: true }))
+  })
+
+  it('refuse de supprimer son adhésion (réservé à l’admin)', async () => {
+    await assertFails(deleteDoc(member('alice')))
+    await assertSucceeds(deleteDoc(doc(dbAs('admin'), 'editions', E, 'members', 'alice')))
+  })
+})
+
+describe('visiteur non connecté', () => {
+  it('ne peut rien lire ni écrire', async () => {
+    const db = dbAs(null)
+    await assertFails(getDoc(doc(db, 'editions', E)))
+    await assertFails(getDocs(collection(db, 'editions', E, 'candidates')))
+    await assertFails(getDoc(doc(db, 'users', 'alice')))
+    await assertFails(getDoc(doc(db, 'usernames', 'alice')))
+    await assertFails(getDocs(collection(db, 'editions', E, 'members')))
+    await assertFails(
+      setDoc(doc(db, 'editions', E, 'members', 'carol'), { joinedAt: serverTimestamp(), code: CODE, hasPicked: false }),
+    )
+  })
+})
+
 describe('admin', () => {
   it('refuse de se rendre admin', async () => {
     await assertFails(setDoc(doc(dbAs('alice'), 'admins', 'alice'), {}))
