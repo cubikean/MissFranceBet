@@ -22,8 +22,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 /** Redirige vers /bienvenue tant que le pseudo n'est pas choisi (à utiliser sous RequireAuth). */
 export function RequireProfile({ children }: { children: ReactNode }) {
   const profile = useProfile()
+  const location = useLocation()
   if (profile.loading) return <Loading />
-  if (!profile.data) return <Navigate to="/bienvenue" replace />
+  // `from` : après l'onboarding, on revient sur le lien d'invitation /rejoindre/<code>.
+  if (!profile.data) return <Navigate to="/bienvenue" replace state={{ from: location.pathname }} />
   return children
 }
 

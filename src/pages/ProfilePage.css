@@ -1,0 +1,58 @@
+.profile__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.profile__header h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+  background: var(--color-surface);
+  font-size: var(--text-xl);
+}
+
+.profile__counts {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.profile__trophies {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.profile__trophy {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.profile__trophy-emoji {
+  font-size: var(--text-xl);
+  line-height: 1;
+}
+
+.profile__trophy-body {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  min-width: 0;
+}
+
+.profile__button {
+  justify-self: start;
+}

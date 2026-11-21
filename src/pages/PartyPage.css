@@ -1,0 +1,192 @@
+.soiree__header {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.soiree__header h1 {
+  overflow-wrap: anywhere;
+}
+
+.soiree__cta {
+  justify-self: start;
+}
+
+.soiree__picks-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: var(--space-4);
+}
+
+.soiree__counter {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Joueurs */
+.players {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.player {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-photo);
+  background: var(--color-surface);
+}
+
+.player--compact {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: none;
+}
+
+.player--me {
+  border: 3px solid var(--color-strass);
+}
+
+.player__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.player__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--color-bg);
+  font-size: var(--text-md);
+}
+
+.player__name {
+  flex: 1;
+  min-width: 0;
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.player__done {
+  font-weight: var(--weight-semibold);
+}
+
+.player__sash {
+  flex: none;
+  max-width: 50%;
+}
+
+.player__meta {
+  font-size: var(--text-sm);
+}
+
+.player__history summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap-target);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.player__history ol {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+}
+
+/* Podium : seul bloc centré de l'app */
+.podium {
+  display: grid;
+  gap: var(--space-4);
+  text-align: center;
+}
+
+.podium__steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.podium__step {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: center;
+  padding: var(--space-3) var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-photo);
+  background: var(--color-surface);
+}
+
+.podium__step--gold {
+  padding-block: var(--space-5);
+  border: 3px solid var(--color-or);
+}
+
+.podium__step--silver {
+  border-top: 3px solid var(--color-argent);
+}
+
+.podium__step--bronze {
+  border-top: 3px solid var(--color-bronze);
+}
+
+.podium__trophy {
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.podium__title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.podium__photo {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: var(--radius-photo);
+}
+
+.podium__name {
+  font-family: var(--font-display);
+  font-weight: var(--weight-title);
+  line-height: var(--leading-title);
+}
+
+.podium__players {
+  font-size: var(--text-sm);
+}
+
+/* Journal */
+.journal {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.journal__time {
+  display: inline-block;
+  min-width: 3.5em;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,115 @@
+/* Briques d'interface communes aux écrans joueur (formulaires, cartes, messages). */
+.stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.stack--lg {
+  gap: var(--space-6);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sheet);
+  background: var(--color-surface);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field__label {
+  font-weight: var(--weight-semibold);
+}
+
+.field__hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.input {
+  width: 100%;
+  min-height: var(--tap-target);
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-photo);
+  background: var(--color-surface);
+}
+
+.input:focus-visible {
+  border-color: var(--color-echarpe);
+}
+
+.input--code {
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.form-error {
+  color: var(--color-strass);
+  font-weight: var(--weight-semibold);
+}
+
+.form-ok {
+  font-weight: var(--weight-semibold);
+}
+
+.button--block {
+  width: 100%;
+}
+
+/* Lien qui ressemble à du texte, mais garde une cible tactile de 44 px. */
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-target);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-echarpe);
+  font-weight: var(--weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.section-title {
+  font-size: var(--text-md);
+}
+
+.code-badge {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-photo);
+  background: var(--color-bg);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.2em;
+}
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-strass);
+  color: var(--color-on-dark);
+  /* blanc sur Strass : bold et 16 px minimum (DESIGN.md) */
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.live-badge::before {
+  content: '';
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: currentColor;
+}
