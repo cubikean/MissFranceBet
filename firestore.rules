@@ -30,11 +30,16 @@ service cloud.firestore {
       return data.keys().hasOnly(keys) && data.keys().hasAll(keys);
     }
 
+    // Pseudo : 2 à 20 caractères, sans espace au bord, sans « / », sans caractère de contrôle
+    // (retour à la ligne…) ni caractère de format invisible (espace de largeur nulle…) : sinon
+    // « Olga » et « Olga » + U+200B passeraient pour deux pseudos différents. (?s) : le point
+    // couvre aussi les retours à la ligne. Aligné avec usernameError (src/lib/profile.ts).
     function validName(n) {
       return n is string
         && n.size() >= 2 && n.size() <= 20
         && n.trim() == n
-        && !n.matches('.*/.*');
+        && !n.matches('(?s).*/.*')
+        && !n.matches('(?s).*[\\p{Cc}\\p{Cf}].*');
     }
 
     // Photo de profil : null, ou data URL WebP/JPEG compressée par l'app (PHOTO_MAX_CHARS dans
@@ -93,10 +98,59 @@ service cloud.firestore {
       return partyData(p).status == 'open';
     }
 
+    // Phases d'une party vivante. Une party supprimée reste en base comme pierre tombale
+    // (status 'deleted') : son id ne peut plus être recréé, et plus rien ne s'y écrit.
+    function liveStatus(s) {
+      return s in ['open', 'closed', 'finished'];
+    }
+
+    // Party existante et non supprimée (si elle n'existe pas, get échoue : règle refusée).
+    function isLive(p) {
+      return liveStatus(partyData(p).status);
+    }
+
+    function isLiveAfter(p) {
+      return liveStatus(getAfter(partyPath(p)).data.status);
+    }
+
     // Après la fermeture (closed ou finished), les membres et le super admin voient tous les pronos.
     // Avant, personne ne voit ceux des autres : ni l'admin de la party (il joue aussi), ni le super admin.
+    // Une party supprimée ne révèle rien (on ne sait plus si ses pronos l'avaient été).
     function isRevealed(p) {
-      return (isMember(p) || isSuperAdmin()) && partyData(p).status != 'open';
+      return (isMember(p) || isSuperAdmin()) && partyData(p).status in ['closed', 'finished'];
+    }
+
+    // Identifiant de candidate (format des ids de src/data/editions/*/candidates.json).
+    function validCandidateId(x) {
+      return x is string && x.matches('^[a-z0-9-]{1,64}$');
+    }
+
+    function optionalCandidateId(x) {
+      return x == null || validCandidateId(x);
+    }
+
+    // null, ou liste de 1 à max ids de candidates distincts. Les règles n'ont pas de boucle :
+    // la liste (bornée) est jointe puis contrôlée d'un coup par une regex. Redécoupée, elle doit
+    // redonner la liste d'origine : chaque élément est une chaîne (join convertit les nombres)
+    // sans virgule cachée (sinon sa longueur serait illimitée).
+    function optionalCandidateList(l, max) {
+      return l == null
+        || (l is list
+          && l.size() >= 1 && l.size() <= max
+          && l.toSet().size() == l.size()
+          && l.join(',').matches('^[a-z0-9-]{1,64}(,[a-z0-9-]{1,64})*$')
+          && l.join(',').split(',') == l);
+    }
+
+    // results/live après écriture (fusion comprise) : champs connus, typés et bornés.
+    function validResults(d) {
+      return d.keys().hasOnly(['top15', 'top5', 'winner', 'firstRunnerUp', 'secondRunnerUp', 'updatedAt'])
+        && optionalCandidateList(d.get('top15', null), 15)
+        && optionalCandidateList(d.get('top5', null), 5)
+        && optionalCandidateId(d.get('winner', null))
+        && optionalCandidateId(d.get('firstRunnerUp', null))
+        && optionalCandidateId(d.get('secondRunnerUp', null))
+        && d.updatedAt == request.time;
     }
 
     // ---------- Super admin ----------
@@ -146,8 +200,9 @@ service cloud.firestore {
     }
 
     match /usernames/{lower} {
-      // get seulement : vérifier qu'un pseudo est libre, sans pouvoir lister tout le monde.
-      allow get: if signedIn();
+      // get seulement, et seulement d'un pseudo libre ou du sien : savoir si un pseudo est pris
+      // (refus) sans pouvoir en tirer l'uid de son propriétaire, ni lister tout le monde.
+      allow get: if signedIn() && (resource == null || resource.data.uid == request.auth.uid);
       allow list: if false;
 
       // create échoue si le document existe déjà (ce serait un update) : pseudo unique.
@@ -185,16 +240,17 @@ service cloud.firestore {
             && getAfter(partyPath(request.resource.data.partyId)).data.ownerUid == request.auth.uid)
           || (exists(partyPath(request.resource.data.partyId))
             && canManage(request.resource.data.partyId)
+            && isLive(request.resource.data.partyId)
             && partyData(request.resource.data.partyId).code != code)
         );
 
       allow update: if false;
 
-      // Libéré, dans le même batch, quand la party est supprimée ou que son code change ;
-      // par son admin ou le super admin.
+      // Libéré, dans le même batch, quand la party est supprimée (pierre tombale) ou que son code
+      // change ; par son admin ou le super admin. Le code libéré peut resservir à une autre party.
       allow delete: if isSuperAdmin()
         || (canManage(resource.data.partyId)
-          && (!existsAfter(partyPath(resource.data.partyId))
+          && (getAfter(partyPath(resource.data.partyId)).data.status == 'deleted'
             || getAfter(partyPath(resource.data.partyId)).data.code != code));
     }
 
@@ -206,10 +262,13 @@ service cloud.firestore {
     // ---------- Parties ----------
 
     match /parties/{p} {
-      allow get: if isMember(p) || isSuperAdmin();
+      // Une party supprimée (pierre tombale) n'est plus lisible que par le super admin (sauvegarde).
+      allow get: if (isMember(p) && (resource == null || liveStatus(resource.data.status))) || isSuperAdmin();
       allow list: if isSuperAdmin();
 
       // Création : le créateur devient admin et membre ; le code est réservé dans le même batch.
+      // create ne s'applique qu'à un document absent : la pierre tombale d'une party supprimée
+      // empêche de recréer son id (et de récupérer ses adhésions, son journal et ses pronos).
       allow create: if signedIn()
         && exactKeys(request.resource.data,
              ['editionId', 'name', 'ownerUid', 'code', 'status', 'eventCount', 'createdAt'])
@@ -229,18 +288,21 @@ service cloud.firestore {
       // Changer de code : seul champ modifié, le nouveau partyCodes/{code} est créé et l'ancien
       // supprimé dans le même batch (l'ancien lien d'invitation cesse de marcher).
       allow update: if canManage(p)
+        && liveStatus(resource.data.status)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['code'])
         && validCode(request.resource.data.code)
         && getAfter(/databases/$(database)/documents/partyCodes/$(request.resource.data.code)).data.partyId == p
         && !existsAfter(/databases/$(database)/documents/partyCodes/$(resource.data.code));
 
       allow update: if canManage(p)
+        && liveStatus(resource.data.status)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'status', 'ownerUid', 'eventCount'])
         && validPartyName(request.resource.data.name)
-        && request.resource.data.status in ['open', 'closed', 'finished']
+        && liveStatus(request.resource.data.status)
         && (
-          // renommage seul
-          (request.resource.data.status == resource.data.status
+          // renommage seul (le nom doit changer : pas d'écriture à vide)
+          (request.resource.data.name != resource.data.name
+            && request.resource.data.status == resource.data.status
             && request.resource.data.ownerUid == resource.data.ownerUid
             && request.resource.data.eventCount == resource.data.eventCount)
           // changement de phase
@@ -253,19 +315,34 @@ service cloud.firestore {
             && request.resource.data.status == resource.data.status
             && request.resource.data.eventCount == resource.data.eventCount + 1
             && exists(/databases/$(database)/documents/parties/$(p)/members/$(request.resource.data.ownerUid))
+            && existsAfter(/databases/$(database)/documents/parties/$(p)/members/$(request.resource.data.ownerUid))
             && existsAfter(/databases/$(database)/documents/parties/$(p)/events/$(string(request.resource.data.eventCount))))
         );
 
       // Suppression : admin de la party ou super admin (double confirmation dans l'interface).
-      allow delete: if canManage(p);
+      // Pierre tombale : le document reste, seul son statut passe à 'deleted' (avec deletedAt),
+      // dans le même batch que la libération du code et la suppression des adhésions (celle de
+      // l'admin au moins est vérifiée ici ; l'app retire toutes les autres).
+      allow update: if canManage(p)
+        && liveStatus(resource.data.status)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deletedAt'])
+        && request.resource.data.status == 'deleted'
+        && request.resource.data.deletedAt == request.time
+        && !existsAfter(/databases/$(database)/documents/partyCodes/$(resource.data.code))
+        && !existsAfter(/databases/$(database)/documents/parties/$(p)/members/$(resource.data.ownerUid));
+
+      // Jamais de suppression réelle : elle libérerait l'id, qu'on pourrait recréer pour
+      // récupérer les adhésions, le journal et les pronos restés en base.
+      allow delete: if false;
 
       // ---------- Journal ----------
 
       // events/{n} : création seule, cohérente avec la party écrite dans le même batch.
       // type 'status' : from/to = phases ; type 'owner' : from/to = uid de l'ancien et du nouvel admin.
       match /events/{n} {
-        allow read: if isMember(p) || isSuperAdmin();
+        allow read: if (isMember(p) && isLive(p)) || isSuperAdmin();
         allow create: if canManage(p)
+          && isLiveAfter(p)
           && exactKeys(request.resource.data, ['type', 'from', 'to', 'by', 'at'])
           && request.resource.data.by == request.auth.uid
           && request.resource.data.at == request.time
@@ -286,8 +363,8 @@ service cloud.firestore {
 
       match /members/{uid} {
         // Un membre voit les autres membres (et qui a déjà pronostiqué). Aucun code n'y est stocké.
-        allow get: if isSelf(uid) || isMember(p) || isSuperAdmin();
-        allow list: if isMember(p) || isSuperAdmin();
+        allow get: if isSelf(uid) || (isMember(p) && isLive(p)) || isSuperAdmin();
+        allow list: if (isMember(p) && isLive(p)) || isSuperAdmin();
 
         // Deux façons d'entrer : créer la party (dans le même batch), ou prouver qu'on connaît
         // le code via joinProofs/{uid}, écrit dans le même batch puis supprimé par le client.
@@ -300,8 +377,9 @@ service cloud.firestore {
           && request.resource.data.editionId == getAfter(partyPath(p)).data.editionId
           && (
             (!exists(partyPath(p)) && getAfter(partyPath(p)).data.ownerUid == uid)
-            || getAfter(/databases/$(database)/documents/parties/$(p)/joinProofs/$(uid)).data.code
-               == partyData(p).code
+            || (isLive(p)
+            && getAfter(/databases/$(database)/documents/parties/$(p)/joinProofs/$(uid)).data.code
+               == partyData(p).code)
           );
 
         // Seul changement possible : hasPicked passe à true, dans le batch d'un prono.
@@ -312,18 +390,27 @@ service cloud.firestore {
           && existsAfter(/databases/$(database)/documents/parties/$(p)/picks/$(uid));
 
         // Quitter (soi-même) ou être retiré (par l'admin ou le super admin). L'admin ne peut ni
-        // partir ni être retiré : il transmet d'abord son rôle. Exception : la suppression de la
-        // party, où toutes les adhésions partent dans le même batch que la party.
-        allow delete: if (isSelf(uid) && uid != partyData(p).ownerUid)
-          || (canManage(p) && uid != partyData(p).ownerUid)
-          || (canManage(p) && !existsAfter(partyPath(p)));
+        // partir ni être retiré : il transmet d'abord son rôle. L'admin s'entend avant ET après
+        // l'écriture : impossible de transmettre le rôle et de retirer le nouvel admin (ou de
+        // partir) dans le même batch. Exception : la suppression de la party (pierre tombale), où
+        // toutes les adhésions partent dans le même batch ; une adhésion restée sous une party
+        // supprimée ou absente peut toujours être retirée.
+        allow delete: if (isSelf(uid) || canManage(p))
+          && (
+            !existsAfter(partyPath(p))
+            || getAfter(partyPath(p)).data.status == 'deleted'
+            || (uid != partyData(p).ownerUid && uid != getAfter(partyPath(p)).data.ownerUid)
+          );
       }
 
       // Preuve temporaire du code, écrite avec l'adhésion puis supprimée aussitôt par le client.
       // Illisible par tous, auteur compris.
       match /joinProofs/{uid} {
         allow read: if false;
+        // Seulement sous une party existante et non supprimée, par un non-membre (qui rejoint).
         allow create, update: if isSelf(uid)
+          && isLive(p)
+          && !isMember(p)
           && exactKeys(request.resource.data, ['code'])
           && request.resource.data.code is string
           && request.resource.data.code.size() <= 64;
@@ -332,12 +419,14 @@ service cloud.firestore {
 
       // ---------- Résultats (saisis par l'admin de la party) ----------
 
+      // Saisie seulement pendant l'émission (closed) : une fois la soirée terminée, corriger le
+      // podium (donc les trophées) oblige à revenir à 'closed', ce qui est journalisé.
       match /results/{docId} {
-        allow read: if isMember(p) || isSuperAdmin();
+        allow read: if (isMember(p) && isLive(p)) || isSuperAdmin();
         allow write: if canManage(p)
           && docId == 'live'
-          && request.resource.data.keys()
-               .hasOnly(['top15', 'top5', 'winner', 'firstRunnerUp', 'secondRunnerUp', 'updatedAt']);
+          && partyData(p).status == 'closed'
+          && validResults(request.resource.data);
       }
 
       // ---------- Pronos ----------

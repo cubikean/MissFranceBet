@@ -104,13 +104,28 @@ async function transfer(db: Firestore, uid: string, from: string, to: string, n:
   return b.commit()
 }
 
-/** Supprime la party comme le fait deleteParty (adhésions + code + party). */
-async function deletePartyBatch(db: Firestore, opts: { keepMembers?: boolean; keepCode?: boolean } = {}) {
+/**
+ * Supprime la party comme le fait deleteParty : adhésions + code + pierre tombale
+ * (status 'deleted', deletedAt serveur). `over` permet de fausser la pierre tombale.
+ */
+async function deletePartyBatch(
+  db: Firestore,
+  opts: { keepMembers?: string[]; keepCode?: boolean; over?: Record<string, unknown> } = {},
+) {
   const b = writeBatch(db)
-  if (!opts.keepMembers) for (const uid of ['olga', 'alice', 'bob']) b.delete(sub(db, 'members', uid))
+  for (const uid of ['olga', 'alice', 'bob']) if (!opts.keepMembers?.includes(uid)) b.delete(sub(db, 'members', uid))
   if (!opts.keepCode) b.delete(doc(db, 'partyCodes', CODE))
-  b.delete(partyDoc(db))
+  b.update(partyDoc(db), { status: 'deleted', deletedAt: serverTimestamp(), ...opts.over })
   return b.commit()
+}
+
+/** Lit un document sans les règles (vérifier l'état de la base). */
+async function rawGet(...path: [string, ...string[]]) {
+  let data: Record<string, unknown> | undefined
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    data = (await getDoc(doc(ctx.firestore() as unknown as Firestore, ...path))).data()
+  })
+  return data
 }
 
 async function seed() {
@@ -145,10 +160,13 @@ async function setStatusRaw(status: string) {
   })
 }
 
+// Hôte et port posés par `firebase emulators:exec` (repli : 127.0.0.1:8080, celui de firebase.json).
+const [EMU_HOST, EMU_PORT] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080').split(':')
+
 beforeAll(async () => {
   env = await initializeTestEnvironment({
     projectId: 'demo-pronos-miss',
-    firestore: { rules: readFileSync('firestore.rules', 'utf8'), host: '127.0.0.1', port: 8080 },
+    firestore: { rules: readFileSync('firestore.rules', 'utf8'), host: EMU_HOST, port: Number(EMU_PORT) },
   })
 })
 
@@ -251,6 +269,19 @@ describe('rejoindre une party', () => {
 
   it('refuse une preuve écrite pour quelqu’un d’autre', async () => {
     await assertFails(setDoc(sub(dbAs('carol'), 'joinProofs', 'dave'), { code: CODE }))
+  })
+
+  it('accepte une adhésion normale avec preuve, puis la suppression de la preuve, comme joinParty', async () => {
+    const carol = dbAs('carol')
+    await assertSucceeds(joinBatch(carol, 'carol', CODE))
+    await assertSucceeds(deleteDoc(sub(carol, 'joinProofs', 'carol')))
+    await assertSucceeds(getDoc(partyDoc(carol)))
+  })
+
+  it('refuse une preuve sous une party inexistante, ou écrite par un membre déjà dans la party', async () => {
+    await assertFails(setDoc(sub(dbAs('carol'), 'joinProofs', 'carol', 'nexistepas'), { code: CODE }))
+    await assertFails(setDoc(sub(dbAs('alice'), 'joinProofs', 'alice'), { code: CODE }))
+    await assertSucceeds(setDoc(sub(dbAs('carol'), 'joinProofs', 'carol'), { code: CODE }))
   })
 })
 
@@ -500,6 +531,24 @@ describe('transmission du rôle d’admin', () => {
   it('laisse le super admin réattribuer le rôle', async () => {
     await assertSucceeds(transfer(dbAs('boss'), 'boss', 'olga', 'bob', 1))
   })
+
+  it('refuse de transmettre le rôle et de retirer le nouvel admin dans le même batch, même au super admin', async () => {
+    const boss = dbAs('boss')
+    const b = writeBatch(boss)
+    b.update(partyDoc(boss), { ownerUid: 'alice', eventCount: 1 })
+    b.set(sub(boss, 'events', '1'), { type: 'owner', from: 'olga', to: 'alice', by: 'boss', at: serverTimestamp() })
+    b.delete(sub(boss, 'members', 'alice'))
+    await assertFails(b.commit())
+  })
+
+  it('laisse retirer un autre membre dans le batch d’une transmission', async () => {
+    const olga = dbAs('olga')
+    const b = writeBatch(olga)
+    b.update(partyDoc(olga), { ownerUid: 'alice', eventCount: 1 })
+    b.set(sub(olga, 'events', '1'), { type: 'owner', from: 'olga', to: 'alice', by: 'olga', at: serverTimestamp() })
+    b.delete(sub(olga, 'members', 'bob'))
+    await assertSucceeds(b.commit())
+  })
 })
 
 describe('changement du code d’invitation', () => {
@@ -549,19 +598,26 @@ describe('changement du code d’invitation', () => {
   })
 })
 
-describe('suppression d’une party', () => {
-  it('laisse l’admin supprimer sa party, son code et les adhésions', async () => {
+describe('suppression d’une party (pierre tombale)', () => {
+  it('laisse l’admin supprimer sa party : pierre tombale, code libéré, adhésions retirées', async () => {
     await assertSucceeds(deletePartyBatch(dbAs('olga')))
     await assertFails(getDoc(partyDoc(dbAs('alice'))))
-    let codeExists = true
-    await env.withSecurityRulesDisabled(async (ctx) => {
-      codeExists = (await getDoc(doc(ctx.firestore() as unknown as Firestore, 'partyCodes', CODE))).exists()
-    })
-    expect(codeExists).toBe(false)
+    await assertFails(getDoc(partyDoc(dbAs('olga'))))
+    expect(await rawGet('partyCodes', CODE)).toBeUndefined()
+    expect(await rawGet('parties', P, 'members', 'olga')).toBeUndefined()
+    const tomb = await rawGet('parties', P)
+    expect(tomb).toMatchObject({ status: 'deleted', ownerUid: 'olga', code: CODE, name: 'Party de olga' })
+    expect(tomb?.deletedAt).toBeInstanceOf(Timestamp)
+    // Le super admin la lit encore (sauvegarde), et elle n'apparaît plus dans les adhésions.
+    expect((await getDoc(partyDoc(dbAs('boss')))).data()?.status).toBe('deleted')
+    const mine = await getDocs(query(collectionGroup(dbAs('alice'), 'members'), where('uid', '==', 'alice')))
+    expect(mine.size).toBe(0)
   })
 
   it('laisse le super admin supprimer n’importe quelle party', async () => {
     await assertSucceeds(deletePartyBatch(dbAs('boss')))
+    expect((await rawGet('parties', P))?.status).toBe('deleted')
+    expect(await rawGet('partyCodes', CODE)).toBeUndefined()
   })
 
   it('refuse la suppression par un membre ou l’admin d’une autre party', async () => {
@@ -570,8 +626,82 @@ describe('suppression d’une party', () => {
     await assertFails(deleteDoc(partyDoc(dbAs('alice'))))
   })
 
+  it('refuse toute suppression réelle du document, même avec le code et les adhésions', async () => {
+    for (const uid of ['olga', 'boss']) {
+      const db = dbAs(uid)
+      const b = writeBatch(db)
+      for (const m of ['olga', 'alice', 'bob']) b.delete(sub(db, 'members', m))
+      b.delete(doc(db, 'partyCodes', CODE))
+      b.delete(partyDoc(db))
+      await assertFails(b.commit())
+    }
+  })
+
+  it('refuse une pierre tombale qui garde le code, l’adhésion de l’admin, ou change d’autres champs', async () => {
+    const olga = dbAs('olga')
+    await assertFails(deletePartyBatch(olga, { keepCode: true }))
+    await assertFails(deletePartyBatch(olga, { keepMembers: ['olga'] }))
+    await assertFails(deletePartyBatch(olga, { over: { name: 'Autre nom' } }))
+    await assertFails(deletePartyBatch(olga, { over: { deletedAt: Timestamp.fromDate(new Date('2026-01-01')) } }))
+    await assertFails(deletePartyBatch(olga, { over: { status: 'supprimee' } }))
+  })
+
   it('refuse de libérer le code sans supprimer la party', async () => {
     await assertFails(deleteDoc(doc(dbAs('olga'), 'partyCodes', CODE)))
+  })
+
+  it('refuse de recréer l’id d’une party supprimée, et laisse le code libéré resservir', async () => {
+    await assertSucceeds(deletePartyBatch(dbAs('olga')))
+    await assertFails(createBatch(dbAs('olga'), 'olga', P, 'NEWNEW'))
+    await assertFails(createBatch(dbAs('carol'), 'carol', P, CODE))
+    await assertSucceeds(createBatch(dbAs('carol'), 'carol', 'p3', CODE))
+    await assertSucceeds(joinBatch(dbAs('alice'), 'alice', CODE, {}, 'p3'))
+  })
+
+  it('n’accepte plus aucune écriture sur une party supprimée ni ses sous-collections', async () => {
+    await assertSucceeds(pick(dbAs('alice'), 'alice', 'corse', 1))
+    await assertSucceeds(deletePartyBatch(dbAs('olga')))
+    for (const uid of ['olga', 'boss']) {
+      const db = dbAs(uid)
+      await assertFails(updateDoc(partyDoc(db), { name: 'Résurrection' }))
+      await assertFails(updateDoc(partyDoc(db), { status: 'open' }))
+      await assertFails(setStatus(db, uid, 'deleted', 'open', 1))
+      await assertFails(transfer(db, uid, 'olga', 'alice', 1))
+      await assertFails(
+        setDoc(sub(db, 'results', 'live'), { winner: 'corse', updatedAt: serverTimestamp() }, { merge: true }),
+      )
+      const b = writeBatch(db)
+      b.set(doc(db, 'partyCodes', 'NEWNEW'), { partyId: P, editionId: E })
+      b.update(partyDoc(db), { code: 'NEWNEW' })
+      await assertFails(b.commit())
+    }
+    // Rejoindre avec l'ancien code (resté dans la pierre tombale), ou écrire une preuve.
+    await assertFails(joinBatch(dbAs('alice'), 'alice', CODE, { hasPicked: true }))
+    await assertFails(setDoc(sub(dbAs('carol'), 'joinProofs', 'carol'), { code: CODE }))
+    // Membre revenu par la base : ni prono ni lecture des pronos des autres.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore() as unknown as Firestore
+      await setDoc(sub(db, 'members', 'bob'), { uid: 'bob', editionId: E, joinedAt: Timestamp.now(), hasPicked: false })
+    })
+    await assertFails(pick(dbAs('bob'), 'bob', 'corse', 1))
+    await assertFails(getDoc(sub(dbAs('bob'), 'picks', 'alice')))
+    await assertFails(getDoc(partyDoc(dbAs('bob'))))
+    await assertFails(getDocs(collection(dbAs('bob'), 'parties', P, 'events')))
+    await assertFails(getDocs(collection(dbAs('bob'), 'parties', P, 'members')))
+    await assertFails(getDoc(sub(dbAs('bob'), 'results', 'live')))
+    await assertFails(getDocs(collection(dbAs('boss'), 'parties', P, 'picks')))
+    // Il peut en revanche retirer cette adhésion orpheline.
+    await assertSucceeds(deleteDoc(sub(dbAs('bob'), 'members', 'bob')))
+  })
+
+  it('refuse une entrée de journal dans le batch de la suppression', async () => {
+    const olga = dbAs('olga')
+    const b = writeBatch(olga)
+    for (const m of ['olga', 'alice', 'bob']) b.delete(sub(olga, 'members', m))
+    b.delete(doc(olga, 'partyCodes', CODE))
+    b.update(partyDoc(olga), { status: 'deleted', deletedAt: serverTimestamp() })
+    b.set(sub(olga, 'events', '0'), { type: 'status', from: 'open', to: 'deleted', by: 'olga', at: serverTimestamp() })
+    await assertFails(b.commit())
   })
 })
 
@@ -631,6 +761,13 @@ describe('phases et journal', () => {
     await assertFails(updateDoc(partyDoc(olga), { editionId: '2028' }))
   })
 
+  it('refuse une écriture à vide de la party (aucun champ changé)', async () => {
+    const olga = dbAs('olga')
+    await assertSucceeds(setStatus(olga, 'olga', 'open', 'closed', 1))
+    await assertFails(updateDoc(partyDoc(olga), { status: 'closed', eventCount: 1 }))
+    await assertFails(updateDoc(partyDoc(olga), { name: 'Party de olga' }))
+  })
+
   it('refuse une entrée de journal sans type ou d’un type inconnu', async () => {
     const olga = dbAs('olga')
     const b = writeBatch(olga)
@@ -644,11 +781,33 @@ describe('phases et journal', () => {
 describe('résultats', () => {
   const results = (uid: string, data: Record<string, unknown> = { winner: 'bretagne', updatedAt: serverTimestamp() }) =>
     setDoc(sub(dbAs(uid), 'results', 'live'), data, { merge: true })
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `candidate-${i + 1}`)
+
+  // Les résultats se saisissent pendant l'émission : pronos fermés.
+  beforeEach(async () => {
+    await setStatusRaw('closed')
+  })
 
   it('laisse l’admin de la party et le super admin saisir les résultats', async () => {
     await assertSucceeds(results('olga'))
     await assertSucceeds(results('boss'))
     await assertSucceeds(getDoc(sub(dbAs('alice'), 'results', 'live')))
+  })
+
+  it('accepte une saisie complète comme celle de ResultsEditor : top 15, top 5, podium, puis effacements', async () => {
+    const top15 = ['cote-d-azur', 'saint-martin-et-saint-barthelemy', ...ids(13)]
+    const top5 = top15.slice(0, 5)
+    await assertSucceeds(results('olga', { top15, updatedAt: serverTimestamp() }))
+    await assertSucceeds(results('olga', { top5, updatedAt: serverTimestamp() }))
+    await assertSucceeds(
+      results('olga', { winner: top5[0], firstRunnerUp: top5[1], secondRunnerUp: top5[2], updatedAt: serverTimestamp() }),
+    )
+    const saved = await getDoc(sub(dbAs('alice'), 'results', 'live'))
+    expect(saved.data()).toMatchObject({ top15, top5, winner: top5[0] })
+    await assertSucceeds(
+      results('olga', { winner: null, firstRunnerUp: null, secondRunnerUp: null, updatedAt: serverTimestamp() }),
+    )
+    await assertSucceeds(results('olga', { top15: null, top5: null, updatedAt: serverTimestamp() }))
   })
 
   it('refuse les résultats saisis par un membre, l’admin d’une autre party ou un inconnu', async () => {
@@ -659,8 +818,36 @@ describe('résultats', () => {
   })
 
   it('refuse un autre document que live ou des champs inconnus', async () => {
-    await assertFails(setDoc(sub(dbAs('olga'), 'results', 'autre'), { winner: 'bretagne' }))
-    await assertFails(results('olga', { winner: 'bretagne', trophee: 'olga' }))
+    await assertFails(setDoc(sub(dbAs('olga'), 'results', 'autre'), { winner: 'bretagne', updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { winner: 'bretagne', trophee: 'olga', updatedAt: serverTimestamp() }))
+  })
+
+  it('refuse des listes trop longues, vides, avec doublons ou des ids mal formés', async () => {
+    await assertFails(results('olga', { top15: ids(16), updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { top5: ids(6), updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { top15: [], updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { top5: ['corse', 'corse'], updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { top5: ['corse', 'Bretagne'], updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { top5: ['corse', 'a,b'], updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { top5: [Array.from({ length: 2000 }, (_, i) => `c${i}`).join(',')], updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { top5: ['corse', 42], updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { top15: ['x'.repeat(65)], updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { winner: 'Miss Corse', updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { secondRunnerUp: ['corse'], updatedAt: serverTimestamp() }))
+    await assertFails(results('olga', { firstRunnerUp: 3, updatedAt: serverTimestamp() }))
+  })
+
+  it('exige updatedAt == heure du serveur', async () => {
+    await assertFails(results('olga', { winner: 'corse' }))
+    await assertFails(results('olga', { winner: 'corse', updatedAt: Timestamp.fromDate(new Date('2026-12-12')) }))
+  })
+
+  it('refuse la saisie avant la fermeture et après la fin de la soirée, même au super admin', async () => {
+    for (const status of ['open', 'finished']) {
+      await setStatusRaw(status)
+      await assertFails(results('olga'))
+      await assertFails(results('boss'))
+    }
   })
 })
 
@@ -699,6 +886,38 @@ describe('pseudos et profils', () => {
 
   it('réserve un pseudo libre', async () => {
     await assertSucceeds(claim(dbAs('alice'), 'alice', 'Hugo'))
+  })
+
+  it('accepte accents, espaces, tirets et emojis simples dans un pseudo', async () => {
+    await assertSucceeds(claim(dbAs('alice'), 'alice', 'Zoé'))
+    await assertSucceeds(claim(dbAs('bob'), 'bob', 'Jean-Marc B.'))
+    await assertSucceeds(claim(dbAs('carol'), 'carol', 'Hugo 🎀'))
+  })
+
+  // (Un « / » est refusé aussi, mais il ne peut de toute façon pas figurer dans l'id usernames/{lower}.)
+  it('refuse un pseudo avec un caractère de contrôle ou invisible', async () => {
+    for (const name of ['Ol\tga', 'Olga\r', 'Ol\u0000ga', '​Olga', 'Ol⁠ga', 'Ol­ga', 'Ol‍ga']) {
+      await assertFails(claim(dbAs('alice'), 'alice', name))
+    }
+  })
+
+  it('laisse lire son propre pseudo ou un pseudo libre, pas celui d’un autre (pas d’uid à en tirer)', async () => {
+    await assertSucceeds(claim(dbAs('alice'), 'alice', 'Hugo'))
+    expect((await getDoc(doc(dbAs('alice'), 'usernames', 'hugo'))).data()).toEqual({ uid: 'alice' })
+    expect((await getDoc(doc(dbAs('bob'), 'usernames', 'libre'))).exists()).toBe(false)
+    await assertFails(getDoc(doc(dbAs('bob'), 'usernames', 'hugo')))
+    await assertFails(getDoc(doc(dbAs('boss'), 'usernames', 'hugo')))
+    await assertFails(getDocs(collection(dbAs('boss'), 'usernames')))
+  })
+
+  it('refuse de réserver le pseudo d’un autre dans une transaction (lecture refusée)', async () => {
+    await assertSucceeds(claim(dbAs('alice'), 'alice', 'Hugo'))
+    const bob = dbAs('bob')
+    await assertFails(
+      runTransaction(bob, async (tx) => {
+        await tx.get(doc(bob, 'usernames', 'hugo'))
+      }),
+    )
   })
 
   it('refuse de voler un pseudo pris', async () => {

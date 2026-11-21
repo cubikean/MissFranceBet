@@ -268,6 +268,19 @@ function PartyAdmin({
           <p className="muted" role="status">
             Chargement…
           </p>
+        ) : party.status === 'finished' ? (
+          <>
+            <ResultsEditor partyId={party.id} editionId={party.editionId} results={results.data} readOnly />
+            <p className="muted">
+              La soirée est terminée : les résultats sont figés. Pour les corriger, reviens à la soirée en cours, puis
+              termine-la de nouveau.
+            </p>
+            <div className="manage__actions">
+              <button type="button" className="button button--ghost" onClick={() => askStatus('closed')}>
+                Revenir à la soirée en cours
+              </button>
+            </div>
+          </>
         ) : (
           <ResultsEditor
             partyId={party.id}

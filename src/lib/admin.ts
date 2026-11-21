@@ -18,7 +18,7 @@ import { db } from './firebase'
 import { requireUid, useAuth } from './auth'
 import { AppError, isPermissionDenied } from './errors'
 import { toDate, useSnapshot } from './live'
-import { generateCode, PARTY_NAME_MAX, PARTY_NAME_MIN, setActivePartyId } from './parties'
+import { DELETED_STATUS, generateCode, PARTY_NAME_MAX, PARTY_NAME_MIN, setActivePartyId } from './parties'
 import type { Live, Party, PartyStatus, Results } from './types'
 
 /** true si admins/{uid} existe : super admin (document créé à la main dans la console). */
@@ -134,9 +134,12 @@ export function deletePhraseMatches(typed: string): boolean {
 
 /**
  * Supprime la party (admin de la party ou super admin), après double confirmation :
- * `typedPhrase` doit correspondre à DELETE_PARTY_PHRASE. Supprime en un batch la party, son code
- * et toutes les adhésions : plus personne n'y a accès et les trophées de cette party disparaissent.
- * Les pronos, l'historique et le journal restent orphelins en base, inaccessibles.
+ * `typedPhrase` doit correspondre à DELETE_PARTY_PHRASE. Un batch : toutes les adhésions, le code
+ * (libéré, il peut resservir) et la party, qui devient une pierre tombale (status 'deleted',
+ * deletedAt serveur) : son id ne peut plus être recréé, plus rien ne s'y écrit, et seul le super
+ * admin la lit encore (sauvegarde). Plus personne n'y a accès et ses trophées disparaissent.
+ * Les pronos, l'historique et le journal restent en base, inaccessibles.
+ * Passe la party telle que lue : son code courant est celui qu'on libère.
  */
 export async function deleteParty(party: Party, typedPhrase: string): Promise<void> {
   if (!deletePhraseMatches(typedPhrase)) {
@@ -146,12 +149,16 @@ export async function deleteParty(party: Party, typedPhrase: string): Promise<vo
   const batch = writeBatch(db)
   members.forEach((m) => batch.delete(m.ref))
   batch.delete(doc(db, 'partyCodes', party.code))
-  batch.delete(doc(db, 'parties', party.id))
+  batch.update(doc(db, 'parties', party.id), { status: DELETED_STATUS, deletedAt: serverTimestamp() })
   await batch.commit()
   setActivePartyId(null)
 }
 
-/** Saisit tout ou partie des résultats de la party (fusion). Passe null pour effacer un champ. */
+/**
+ * Saisit tout ou partie des résultats de la party (fusion). Passe null pour effacer un champ.
+ * Seulement en phase 'closed' (refusé par les règles avant la fermeture et une fois la soirée
+ * terminée) ; top15 : 15 ids au plus, top5 : 5 au plus, ids de candidates distincts.
+ */
 export async function setResults(partyId: string, patch: Partial<Omit<Results, 'updatedAt'>>): Promise<void> {
   await setDoc(
     doc(db, 'parties', partyId, 'results', 'live'),
@@ -180,7 +187,8 @@ async function dump(first: string, ...rest: string[]): Promise<Record<string, Re
 /**
  * Sauvegarde complète lisible par le super admin : profils, et pour chaque party ses membres,
  * son journal, ses résultats, et ses pronos et historiques si elle est fermée (avant la
- * fermeture, les pronos sont illisibles même pour lui). À lancer après chaque soirée.
+ * fermeture, les pronos sont illisibles même pour lui). Les parties supprimées (pierres
+ * tombales, status 'deleted') y figurent, sans leurs pronos. À lancer après chaque soirée.
  */
 export async function exportBackup(): Promise<Record<string, unknown>> {
   const users = await dump('users')
@@ -188,14 +196,15 @@ export async function exportBackup(): Promise<Record<string, unknown>> {
   const parties: Record<string, unknown> = {}
   for (const p of partiesSnap.docs) {
     const data = p.data()
-    const revealed = data.status !== 'open'
+    const revealed = data.status === 'closed' || data.status === 'finished'
+    const hidden = data.status === DELETED_STATUS ? 'illisibles (party supprimée)' : 'illisibles avant la fermeture'
     parties[p.id] = {
       ...plain(data),
       members: await dump('parties', p.id, 'members'),
       events: await dump('parties', p.id, 'events'),
       results: await dump('parties', p.id, 'results'),
-      picks: revealed ? await dump('parties', p.id, 'picks') : 'illisibles avant la fermeture',
-      pickHistory: revealed ? await dump('parties', p.id, 'pickHistory') : 'illisible avant la fermeture',
+      picks: revealed ? await dump('parties', p.id, 'picks') : hidden,
+      pickHistory: revealed ? await dump('parties', p.id, 'pickHistory') : hidden,
     }
   }
   return { exportedAt: new Date().toISOString(), users, parties }

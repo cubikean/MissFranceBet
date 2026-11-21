@@ -200,3 +200,25 @@
 .podium-slot--secondRunnerUp .podium-slot__label::before {
   content: '🥉 ';
 }
+
+/* Lecture seule (soirée terminée) */
+.results__readonly-podium {
+  padding: 0;
+  list-style: none;
+}
+
+.podium-slot--static {
+  min-height: 0;
+  border-style: solid;
+}
+
+.results__readonly-list {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.results__readonly-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+}

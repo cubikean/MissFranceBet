@@ -21,21 +21,23 @@ Première édition : **Miss France 2027**, diffusée le **samedi 12 décembre 20
 ## Phases d'une party (`status`)
 `open` (pronos ouverts) → `closed` (fermés et révélés, émission en cours) → `finished` (podium saisi, trophées attribués).
 Seuls l'admin de la party et le super admin changent de phase. Le retour en arrière est permis, mais **chaque changement de phase est journalisé** (de, vers, par qui, heure serveur) dans un journal immuable que tous les membres voient (« Olga a rouvert les pronos à 21h04 »).
+Les résultats ne se saisissent qu'en phase `closed`. Une fois la soirée terminée (`finished`), ils sont figés : pour corriger le podium, donc les trophées, l'admin revient d'abord à la soirée en cours, ce qui est journalisé. La page de gestion affiche alors les résultats en lecture seule, avec le bouton « Revenir à la soirée en cours ».
+En base, une party supprimée garde le statut `deleted` (pierre tombale, voir plus bas) : ce n'est pas une phase, l'app la traite comme inexistante.
 
 ## Vie d'une party
 - **Quitter** : n'importe quel membre peut quitter la party quand il veut, après une **popup de confirmation**. Son prono reste dans la party : s'il revient avec le code, il le retrouve. L'admin ne peut pas quitter sans avoir d'abord transmis son rôle.
 - **Transmettre le rôle d'admin** : l'admin (ou le super admin) désigne un autre membre comme admin. C'est journalisé (« Olga a passé la main à Alice »). L'ancien admin reste membre, sans droits d'admin.
-- **Supprimer la party** : l'admin (ou le super admin), avec une **double confirmation à la GitHub** : une fenêtre explique les conséquences (tous les membres perdent l'accès, les trophées de cette party disparaissent, c'est définitif) et demande de recopier la phrase `je confirme la suppression de la party` dans un champ ; le bouton reste désactivé tant que la phrase ne correspond pas (majuscules et espaces en trop tolérés). La party, son code et toutes les adhésions sont supprimés ensemble.
+- **Supprimer la party** : l'admin (ou le super admin), avec une **double confirmation à la GitHub** : une fenêtre explique les conséquences (tous les membres perdent l'accès, les trophées de cette party disparaissent, c'est définitif) et demande de recopier la phrase `je confirme la suppression de la party` dans un champ ; le bouton reste désactivé tant que la phrase ne correspond pas (majuscules et espaces en trop tolérés). Dans la même écriture, toutes les adhésions sont supprimées, le code est libéré (il peut resservir à une autre party) et la party devient une **pierre tombale** : son document reste, avec le statut `deleted`, pour que personne ne puisse recréer une party avec le même identifiant et récupérer ses anciennes adhésions, son journal ou ses pronos. Une party supprimée n'accepte plus aucune écriture et n'est plus lisible que par le super admin (sauvegarde) ; elle disparaît des écrans de tous, `/admin` compris.
 - **Retirer un membre** : l'admin (ou le super admin), avec une popup de confirmation. L'admin ne peut pas être retiré.
 - **Changer le code** : l'admin (ou le super admin) génère un nouveau code, avec une popup de confirmation. L'ancien code et l'ancien lien cessent aussitôt de marcher ; les membres actuels restent. À utiliser si un lien a fuité.
 - **Pas de validation des membres** : avoir le code suffit pour entrer. Contre les bots, Firebase App Check refuse les requêtes qui ne viennent pas de l'app.
-- **Sauvegarde** : le super admin télécharge en un clic, depuis `/admin`, un fichier JSON avec les profils et, pour chaque party, les membres, le journal, les résultats, et les pronos et historiques si elle est fermée. À faire après chaque soirée.
+- **Sauvegarde** : le super admin télécharge en un clic, depuis `/admin`, un fichier JSON avec les profils et, pour chaque party, les membres, le journal, les résultats, et les pronos et historiques si elle est fermée. Les parties supprimées y figurent (statut `deleted`), sans leurs pronos. À faire après chaque soirée.
 
 ## Comptes
 - Connexion **Google** (OAuth) ou **email + mot de passe**, avec "mot de passe oublié" (email Firebase natif). Les deux sont gratuits sur le plan Spark.
 - Sur iOS en mode installé (standalone), la popup est peu fiable : il faut utiliser `signInWithRedirect` sur mobile et `signInWithPopup` sur desktop. `authDomain` doit être le domaine d'hébergement Firebase (`missfrancebet.web.app`), pour éviter les problèmes de cookies tiers sur Safari.
-- Après la première connexion, l'onboarding demande un **pseudo** (2 à 20 caractères, unique) et propose une **photo facultative** : « Parcourir » (galerie ou fichiers) ou « Prendre une photo » (appareil photo frontal, sur mobile seulement). Sans photo, l'avatar affiche l'initiale du pseudo. La photo est recadrée en carré de 256 px et compressée dans le navigateur (WebP, ou JPEG sur Safari), puis rangée dans le profil : pas de Storage, 0 €.
-- Les profils ne sont lisibles que **par uid** (on connaît celui de ses partenaires de party) : un inscrit ne peut pas parcourir tous les profils et leurs photos. Seul le super admin peut les lister.
+- Après la première connexion, l'onboarding demande un **pseudo** (2 à 20 caractères, unique, sans « / » ni caractère invisible ou de contrôle : retour à la ligne, espace de largeur nulle…) et propose une **photo facultative** : « Parcourir » (galerie ou fichiers) ou « Prendre une photo » (appareil photo frontal, sur mobile seulement). Sans photo, l'avatar affiche l'initiale du pseudo. La photo est recadrée en carré de 256 px et compressée dans le navigateur (WebP, ou JPEG sur Safari), puis rangée dans le profil : pas de Storage, 0 €.
+- Les profils ne sont lisibles que **par uid** (on connaît celui de ses partenaires de party) : un inscrit ne peut pas parcourir tous les profils et leurs photos. Seul le super admin peut les lister. Un pseudo ne mène pas non plus à un uid : `usernames/{pseudo}` n'est lisible que s'il est libre ou si c'est le sien (un refus signifie « déjà pris »).
 - Super admin : un document `admins/{uid}` créé à la main dans la console Firebase. Aucune interface ne permet de le devenir.
 
 ## Écrans (routes)
@@ -60,20 +62,21 @@ La **party active** est mémorisée sur l'appareil (`useActivePartyId`). Si elle
 ```
 admins/{uid}                                   {}  (super admin, créé à la main)
 users/{uid}                                    displayName, displayNameLower, photo (data URL WebP/JPEG ou null), createdAt  (get par uid ; list : super admin)
-usernames/{displayNameLower}                   uid   (unicité des pseudos)
+usernames/{displayNameLower}                   uid   (unicité des pseudos ; get seulement d'un pseudo libre ou du sien, pas de list)
 partyCodes/{CODE}                              partyId, editionId  (l'id EST le code : unicité ; get seulement, pas de list)
-parties/{p}                                    editionId, name, ownerUid, code, status, eventCount, createdAt
+parties/{p}                                    editionId, name, ownerUid, code, status ('open' | 'closed' | 'finished' | 'deleted'), eventCount, createdAt, deletedAt (pierre tombale seulement)
 parties/{p}/members/{uid}                      uid, editionId, joinedAt, hasPicked  (aucun code stocké)
 parties/{p}/joinProofs/{uid}                   code  (preuve écrite avec l'adhésion, comparée à parties/{p}.code ; illisible par tous ; supprimée aussitôt)
 parties/{p}/events/{n}                         type ('status' | 'owner'), from, to, by, at (== request.time)  (journal immuable, n = eventCount)
 parties/{p}/picks/{uid}                        candidateId, changeCount, updatedAt (== request.time)
 parties/{p}/pickHistory/{uid}_{changeCount}    uid, candidateId, changeCount, at (== request.time)
-parties/{p}/results/live                       top15: id[], top5: id[], winner, firstRunnerUp, secondRunnerUp, updatedAt
+parties/{p}/results/live                       top15: id[] (≤ 15) | null, top5: id[] (≤ 5) | null, winner, firstRunnerUp, secondRunnerUp (id | null), updatedAt (== request.time)  (écrit seulement en phase closed)
 ```
 - **Créer une party** = un batch : `parties/{p}` + `partyCodes/{code}` + `members/{créateur}`. Si le code existe déjà, l'écriture est refusée et l'app en tire un autre.
 - **Rejoindre** = lire `partyCodes/{code}`, puis un batch `joinProofs/{moi}` + `members/{moi}` ; les règles comparent la preuve au code de la party.
 - **Changer de phase** ou **transmettre le rôle d'admin** = un batch : `parties/{p}` (status ou ownerUid, eventCount + 1) + `events/{eventCount}`. Jamais les deux à la fois.
-- **Supprimer** = un batch : toutes les adhésions + `partyCodes/{code}` + `parties/{p}`. Les pronos, l'historique et le journal restent orphelins en base, inaccessibles.
+- **Supprimer** = un batch : suppression de toutes les adhésions et de `partyCodes/{code}`, et mise à jour de `parties/{p}` en pierre tombale (`status: 'deleted'`, `deletedAt` = heure serveur, aucun autre champ modifié). Le document n'est jamais supprimé (les règles l'interdisent) : son id reste pris, donc impossible de recréer la party et de retrouver ses anciennes adhésions, son journal ou ses pronos. Une pierre tombale n'accepte plus aucune écriture, ni sur elle ni dans ses sous-collections (seule une adhésion restée là peut encore être retirée) ; elle n'est lisible que par le super admin, et ses pronos par personne. Les pronos, l'historique et le journal restent en base, inaccessibles.
+- **Résultats** : chaque élément est un id de candidate (`^[a-z0-9-]{1,64}$`), les listes sont sans doublon, et l'écriture n'est permise qu'en phase `closed` (par l'admin de la party ou le super admin).
 - Un prono s'écrit en **batch** : `picks/{uid}` et `pickHistory/{uid}_{n}` ensemble, plus `members/{uid}.hasPicked`. Les règles imposent la cohérence avec `getAfter`/`existsAfter` : `changeCount` augmente de 1 exactement, la candidate est la même et l'horodatage est `request.time`.
 - Les candidates étant embarquées, les règles ne vérifient que le format de `candidateId` ; l'app vérifie qu'elle existe. Un id inventé ne ferait gagner aucun trophée.
 - Statut d'une candidate, calculé côté client :

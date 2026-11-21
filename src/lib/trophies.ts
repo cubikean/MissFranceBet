@@ -3,7 +3,8 @@ import { db } from './firebase'
 import { useAuth } from './auth'
 import { useSnapshot } from './live'
 import { getEdition } from './editions'
-import { toParty } from './parties'
+import { isDeletedParty, toParty } from './parties'
+import { isPermissionDenied } from './errors'
 import { toResults } from './results'
 import { trophyFor } from './game'
 import type { Edition, Live, Party, Results, Trophy } from './types'
@@ -58,15 +59,23 @@ export function useMyTrophies(): Live<PartyTrophy[]> {
           }
           for (const id of ids) {
             if (inner.has(id)) continue
+            // Party supprimée ou adhésion retirée pendant l'écoute (lecture refusée) : ses
+            // trophées disparaissent, sans mettre tout le profil en erreur.
+            const gone = (error: Error) => {
+              if (!isPermissionDenied(error)) return fail(error)
+              parties.delete(id)
+              emit()
+            }
             inner.set(id, [
               onSnapshot(
                 doc(db, 'parties', id),
                 (p) => {
-                  if (p.exists()) parties.set(id, toParty(id, p.data()))
+                  const d = p.data()
+                  if (d && !isDeletedParty(d)) parties.set(id, toParty(id, d))
                   else parties.delete(id)
                   emit()
                 },
-                fail,
+                gone,
               ),
               onSnapshot(
                 doc(db, 'parties', id, 'picks', uid),
@@ -83,7 +92,7 @@ export function useMyTrophies(): Live<PartyTrophy[]> {
                   results.set(id, toResults(r.data()))
                   emit()
                 },
-                fail,
+                gone,
               ),
             ])
           }

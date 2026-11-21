@@ -33,11 +33,56 @@ export interface ResultsEditorProps {
   partyId: string
   editionId: string
   results: Results
+  /**
+   * Résultats affichés sans saisie possible : soirée terminée. Les règles n'acceptent les
+   * résultats qu'en phase 'closed' ; pour corriger, l'admin revient à la soirée en cours.
+   */
+  readOnly?: boolean
   /** Appelé après l'enregistrement du podium (pour proposer de terminer la soirée). */
   onPodiumSaved?: () => void
 }
 
-export function ResultsEditor({ partyId, editionId, results, onPodiumSaved }: ResultsEditorProps) {
+export function ResultsEditor({ readOnly, ...props }: ResultsEditorProps) {
+  return readOnly ? <ResultsSummary editionId={props.editionId} results={props.results} /> : <Editor {...props} />
+}
+
+/** Résultats enregistrés, en lecture seule : podium, top 5, top 15. */
+function ResultsSummary({ editionId, results }: { editionId: string; results: Results }) {
+  const byId = new Map(listCandidates(editionId).map((c) => [c.id, c]))
+  const region = (id: string) => byId.get(id)?.region ?? id
+  const podium = podiumOf(results)
+  if (!results.top15 && !results.top5 && !results.winner) {
+    return <p className="muted">Aucun résultat n'a été saisi pour cette soirée.</p>
+  }
+  return (
+    <div className="results">
+      {results.winner && (
+        <ul className="podium-slots results__readonly-podium" aria-label="Podium">
+          {PODIUM_SLOTS.map((s, i) => (
+            <li key={s.key} className={`podium-slot podium-slot--static podium-slot--${s.key}`}>
+              <span className="podium-slot__label">{s.label}</span>
+              <span className="podium-slot__value">{podium[i] ? region(podium[i]!) : 'non saisie'}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(['top5', 'top15'] as const).map((key) => {
+        const ids = results[key]
+        if (!ids) return null
+        return (
+          <section key={key} className="results__readonly-list" aria-labelledby={`results-${key}`}>
+            <h3 id={`results-${key}`} className="results__readonly-title">
+              {STEP_LABEL[key]}
+            </h3>
+            <p>{ids.map(region).join(', ')}</p>
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+function Editor({ partyId, editionId, results, onPodiumSaved }: Omit<ResultsEditorProps, 'readOnly'>) {
   const candidates = listCandidates(editionId)
   const [chosen, setStep] = useState<Step>(() => firstStep(results))
   const done: Record<Step, boolean> = {
