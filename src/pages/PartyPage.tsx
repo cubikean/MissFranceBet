@@ -108,7 +108,10 @@ function BeforeClosing({ party, users }: { party: Party; users: Users }) {
         <h2 id="soiree-players" className="section-title">
           {members.loading ? 'Joueurs' : `${picked} sur ${members.data.length} ont fait leur prono`}
         </h2>
-        <p className="muted">Les pronos restent secrets jusqu'à la fermeture, pour tout le monde, admin compris.</p>
+        <p className="soiree__reveal-note">
+          <strong>Qui a choisi quoi ?</strong> Réponse à la fermeture des pronos : dès que l'admin les ferme, l'écharpe de
+          chacun apparaît ici, avec ses changements d'avis. D'ici là, c'est secret pour tout le monde, admin compris.
+        </p>
         {members.error ? (
           <p className="form-error" role="alert">
             {errorMessage(members.error)}

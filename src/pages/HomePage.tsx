@@ -1,13 +1,12 @@
 import { Link } from 'react-router'
-import { Sash } from '../components/Sash'
+import { CandidateCard } from '../components/CandidateCard'
 import { useNow } from '../components/useNow'
-import { PHASE_LABEL, sashVariant, statusLabel, TROPHY_EMOJI } from '../components/display'
+import { PHASE_LABEL, TROPHY_EMOJI } from '../components/display'
 import {
   candidateStatus,
   currentEdition,
   errorMessage,
   getCandidate,
-  missLabel,
   trophyFor,
   useActiveParty,
   useMyPick,
@@ -120,12 +119,15 @@ export function HomePage() {
               </p>
             ) : candidate ? (
               <>
-                <p className="muted">Ton prono</p>
-                <Sash region={candidate.region} size="lg" variant={sashVariant(status)} />
-                <p className="home__pick-name">
-                  {missLabel(candidate)}, {candidate.name}
-                </p>
-                {statusLabel(status) && <p className="home__status">{statusLabel(status)}</p>}
+                <h2 className="section-title">Ton prono</h2>
+                <CandidateCard
+                  candidate={candidate}
+                  status={status}
+                  mine
+                  showStatus={party.status !== 'open'}
+                  sash="band"
+                  className="home__card"
+                />
               </>
             ) : (
               <p>

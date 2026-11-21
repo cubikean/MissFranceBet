@@ -170,5 +170,10 @@
   font-size: var(--text-sm);
 }
 
-/* Journal */
-
+/* Avant la fermeture : explique quand on verra qui a choisi quoi. */
+.soiree__reveal-note {
+  padding: var(--space-3);
+  border-left: 3px solid var(--color-strass);
+  border-radius: 0 var(--radius-photo) var(--radius-photo) 0;
+  background: var(--color-bg);
+}

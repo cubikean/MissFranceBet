@@ -71,16 +71,16 @@
 
 /* Bouton Instagram : dégradé et glyphe de la marque (seule exception aux tokens de l'app). */
 .fiche__instagram {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
 }
 
 .instagram-button {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
+  justify-self: stretch;
   gap: var(--space-2);
   min-height: var(--tap-target);
   padding: var(--space-2) var(--space-5);
@@ -90,12 +90,7 @@
   font-weight: var(--weight-semibold);
   text-decoration: none;
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
-  box-shadow: 0 2px 8px rgb(221 42 123 / 0.3);
-  transition: transform var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
-}
-
-.instagram-button:hover {
-  box-shadow: 0 4px 14px rgb(221 42 123 / 0.4);
+  transition: transform var(--duration-fast) ease;
 }
 
 .instagram-button:active {

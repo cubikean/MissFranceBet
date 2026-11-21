@@ -1,6 +1,5 @@
 import { Link } from 'react-router'
-import { Sash } from '../components/Sash'
-import { statusLabel } from '../components/display'
+import { CandidateCard } from '../components/CandidateCard'
 import {
   candidateStatus,
   currentEdition,
@@ -51,33 +50,14 @@ export function CandidatesPage() {
 
       <ul className="candidates__grid">
         {candidates.map((c) => {
-          const status = statuses.get(c.id) ?? 'neutral'
-          const isMine = mine?.id === c.id
-          const label = showStatus ? statusLabel(status) : null
           return (
             <li key={c.id}>
-              <Link
-                to={`/candidates/${c.id}`}
-                className={[
-                  'candidate-card',
-                  isMine && 'candidate-card--mine',
-                  status === 'eliminated' && 'candidate-card--out',
-                  status === 'winner' && 'candidate-card--winner',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-              >
-                <span className="candidate-card__photo">
-                  <img src={c.photo} alt="" loading="lazy" decoding="async" width="600" height="1066" />
-                  {isMine && <Sash region="Mon prono" variant="mine" size="sm" className="candidate-card__sash" />}
-                </span>
-                <span className="candidate-card__name">{c.name}</span>
-                <span className="candidate-card__region">
-                  {missLabel(c)}
-                  {label && <span className="candidate-card__status">, {label.toLowerCase()}</span>}
-                  {isMine && <span className="visually-hidden">, ton prono</span>}
-                </span>
-              </Link>
+              <CandidateCard
+                candidate={c}
+                status={statuses.get(c.id) ?? 'neutral'}
+                mine={mine?.id === c.id}
+                showStatus={showStatus}
+              />
             </li>
           )
         })}
