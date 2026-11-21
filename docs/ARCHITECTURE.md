@@ -77,26 +77,31 @@ Résultats et logique de jeu (`results.ts`, `game.ts`, `trophies.ts`)
 - `trophyFor(pick, results): 'gold' | 'silver' | 'bronze' | null`
 - `useMyTrophies(): Live<{ party; edition; candidateId; trophy }[]>` (parties finished)
 
-Administration (`admin.ts`) — admin de la party ou super admin
+Administration (`admin.ts`) — admin de la party ou super admin, sauf mention
 - `useIsSuperAdmin(): Live<boolean>`
-- `setPartyStatus(party: Party, status)` — batch party + events/{n}
+- `setPartyStatus(party: Party, status)` — batch party + events/{n} (type 'status')
+- `transferOwnership(party: Party, newOwnerUid)` — batch party + events/{n} (type 'owner') ; le nouvel admin doit être membre
 - `renameParty(partyId, name)`, `removeMember(partyId, uid)`, `setResults(partyId, patch)` (fusion, `null` efface)
+- `leaveParty(party)` — n'importe quel membre sauf l'admin ; réinitialise la party active. **L'interface confirme d'abord (popup)**
+- `deleteParty(party, typedPhrase)` — refuse si `deletePhraseMatches(typedPhrase)` est faux ; batch adhésions + code + party. `DELETE_PARTY_PHRASE` = « je confirme la suppression de la party » (champ à recopier, bouton désactivé tant que ça ne correspond pas)
+- `exportBackup(): Promise<object>`, `downloadBackup()` — super admin : fichier JSON de sauvegarde
 
 Erreurs (`errors.ts`) : `errorMessage(err): string` (français, prêt à afficher), `AppError`, `isPermissionDenied`.
 
 ## Garanties des règles (firestore.rules)
 
-Chaque point est couvert par `tests/rules/firestore.test.ts` (59 tests, vérifiés aussi par mutation : casser une règle fait échouer un test).
+Chaque point est couvert par `tests/rules/firestore.test.ts` (72 tests, vérifiés aussi par mutation : casser une règle fait échouer un test).
 
-- Création de party : le créateur est `ownerUid`, statut `open`, `statusChanges == 0`, `createdAt == request.time`, code au bon format, `partyCodes/{code}` réservé dans le même batch (create échoue si le code existe), adhésion du créateur dans le même batch. Impossible d'ajouter un second code à une party existante.
+- Création de party : le créateur est `ownerUid`, statut `open`, `eventCount == 0`, `createdAt == request.time`, code au bon format, `partyCodes/{code}` réservé dans le même batch (create échoue si le code existe), adhésion du créateur dans le même batch. Impossible d'ajouter un second code à une party existante.
 - `partyCodes` : get pour tout connecté, list interdit, ni update ni delete (sauf super admin).
 - Rejoindre : `members/{uid}` ne se crée que par soi-même, avec `editionId` égal à celui de la party, `hasPicked == false`, et soit en créant la party, soit avec `joinProofs/{uid}` (même batch) dont le code égale celui de la party. La preuve est illisible par tous.
 - Lecture d'une party et de ses membres : membres et super admin. Liste de toutes les parties : super admin. Collection group `members` : seulement ses propres adhésions (`uid == moi`).
-- Phases : admin de la party ou super admin ; tout changement de statut incrémente `statusChanges` et exige `events/{n}` dans le même batch (from = ancien statut, to = nouveau, by = moi, at = request.time). Journal immuable, lisible des membres. `ownerUid`, `code`, `editionId`, `createdAt` immuables. Suppression d'une party : super admin.
+- Phases et transmission : admin de la party ou super admin ; changer de statut **ou** d'admin (jamais les deux) incrémente `eventCount` et exige `events/{n}` dans le même batch (type, from = ancienne valeur, to = nouvelle, by = moi, at = request.time). Le nouvel admin doit être membre. Journal immuable, lisible des membres. `code`, `editionId`, `createdAt` immuables.
+- Suppression d'une party : admin de la party ou super admin ; son code et les adhésions ne peuvent être supprimés par l'admin que dans le même batch que la party.
 - Pronos : écrits par leur propriétaire seulement, membre, party `open`, clés exactes, `candidateId` au format `[a-z0-9-]`, `updatedAt == request.time`, `changeCount` = 1 à la création puis ancien + 1 ; `getAfter(pickHistory/{uid}_{n})` cohérent. Suppression interdite à tous.
 - Historique : création seule, id `{uid}_{changeCount}`, cohérent avec le prono du même batch. Ni update ni delete.
 - Lecture des pronos : son prono et son historique toujours ; ceux des autres seulement après la fermeture, par les membres et le super admin. **Avant, personne** (ni l'admin de la party, ni le super admin).
-- members : seule mise à jour possible : `hasPicked → true` dans un batch de prono, party ouverte. Retrait : admin de la party ou super admin, jamais le créateur.
+- members : `hasPicked` à la création = existence de mon prono (vrai si je reviens après avoir quitté) ; seule mise à jour : `hasPicked → true` dans un batch de prono, party ouverte. Quitter : soi-même, sauf l'admin. Retrait : admin de la party ou super admin, jamais l'admin.
 - Résultats : écriture admin de la party ou super admin, document `live` seulement, champs connus ; lecture membres et super admin.
 - `admins` : jamais écrit par le client, lecture de son propre doc.
 - Pseudos : `usernames/{lower}` créé seulement si `users/{uid}.displayNameLower` correspond après écriture ; jamais mis à jour ; libéré uniquement par son propriétaire en changeant de pseudo. `users` modifiable par son propriétaire seulement.
@@ -119,6 +124,7 @@ Chaque point est couvert par `tests/rules/firestore.test.ts` (59 tests, vérifi�
 - Tous les écrans métier (pages provisoires dans `src/pages/index.tsx`), bandeau « Installer l'app », animation orchestrée des écharpes et confettis.
 - `/connexion` doit renvoyer vers `state.from` après connexion (pour que le lien `/rejoindre/<code>` marche sans compte).
 - Bundle de 900 kB (Firebase) : découper par route avec `React.lazy` si besoin.
+- **Firebase App Check** (gratuit, reCAPTCHA) à activer avant la mise en ligne : un bot qui teste des codes ne peut pas en deviner un (31^6 ≈ 887 millions), mais il peut épuiser le quota gratuit de 50 000 lectures par jour.
 - Le Sash n'a été vérifié que par typecheck/build, pas visuellement dans un navigateur.
 - `useMyParties` et `useMyTrophies` ouvrent un abonnement par party : sans souci pour quelques parties par joueur.
 - Tests de règles sous Windows : JDK 21 requis (firebase-tools), et lancer vitest depuis un chemin `C:\` en majuscule (sinon vitest se charge deux fois et plante sur `reading 'config'`).

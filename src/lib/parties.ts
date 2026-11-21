@@ -56,7 +56,7 @@ export function toParty(id: string, d: DocumentData): Party {
     ownerUid: d.ownerUid,
     code: d.code,
     status: d.status,
-    statusChanges: d.statusChanges ?? 0,
+    eventCount: d.eventCount ?? 0,
     createdAt: toDate(d.createdAt),
   }
 }
@@ -66,7 +66,7 @@ function toMembership(partyId: string, uid: string, d: DocumentData): Membership
 }
 
 function toEvent(id: string, d: DocumentData): PartyEvent {
-  return { n: Number(id), from: d.from, to: d.to, by: d.by, at: toDate(d.at) }
+  return { n: Number(id), type: d.type === 'owner' ? 'owner' : 'status', from: d.from, to: d.to, by: d.by, at: toDate(d.at) } as PartyEvent
 }
 
 // ---------- Création et adhésion ----------
@@ -93,7 +93,7 @@ export async function createParty(editionId: string, name: string): Promise<{ pa
       ownerUid: uid,
       code,
       status: 'open',
-      statusChanges: 0,
+      eventCount: 0,
       createdAt: serverTimestamp(),
     })
     batch.set(doc(db, 'partyCodes', code), { partyId: partyRef.id, editionId })
@@ -126,11 +126,13 @@ export async function joinParty(rawCode: string): Promise<string> {
 
   const memberRef = doc(db, 'parties', partyId, 'members', uid)
   if ((await getDoc(memberRef)).exists()) return partyId
+  // Si je reviens après avoir quitté la party, mon prono y est encore : hasPicked le reflète.
+  const hasPicked = (await getDoc(doc(db, 'parties', partyId, 'picks', uid))).exists()
 
   const proof = doc(db, 'parties', partyId, 'joinProofs', uid)
   const batch = writeBatch(db)
   batch.set(proof, { code })
-  batch.set(memberRef, { uid, editionId, joinedAt: serverTimestamp(), hasPicked: false })
+  batch.set(memberRef, { uid, editionId, joinedAt: serverTimestamp(), hasPicked })
   try {
     await batch.commit()
   } catch (error) {
@@ -278,7 +280,7 @@ export function useMembers(partyId: string | null): Live<Membership[]> {
   )
 }
 
-/** Journal des changements de phase (membres et super admin), du plus ancien au plus récent. */
+/** Journal (changements de phase, transmissions d'admin), du plus ancien au plus récent. */
 export function usePartyEvents(partyId: string | null): Live<PartyEvent[]> {
   const { user } = useAuth()
   return useSnapshot<PartyEvent[]>(
@@ -353,7 +355,7 @@ export function useActivePartyId(): string | null {
 
 // ---------- Droits ----------
 
-/** true si je peux administrer la party : j'en suis le créateur, ou je suis super admin. */
+/** true si je peux administrer la party : j'en suis l'admin (ownerUid), ou je suis super admin. */
 export function canManageParty(party: Party | null, uid: string | null | undefined, isSuperAdmin: boolean): boolean {
   return !!party && !!uid && (party.ownerUid === uid || isSuperAdmin)
 }

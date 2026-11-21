@@ -88,3 +88,5 @@ Tout est gratuit sur le plan Spark. Compte Google nécessaire.
 9. **Préparer la soirée.** Dans l'onglet Parties : crée ta party, puis partage l'adresse et le lien d'invitation (`/rejoindre/<code>`) à tes amis. Rien d'autre à configurer : l'édition et les candidates sont embarquées dans l'app.
 
 Pour les mises à jour suivantes : `npm run build && npx firebase deploy`.
+
+**Après chaque soirée** : dans l'onglet Admin (super admin), clique sur « Télécharger une sauvegarde » et garde le fichier JSON. Le plan gratuit ne fait aucune sauvegarde automatique.

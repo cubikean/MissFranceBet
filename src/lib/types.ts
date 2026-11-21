@@ -40,7 +40,10 @@ export interface CandidatesFile {
 
 export type PartyStatus = 'open' | 'closed' | 'finished'
 
-/** parties/{id} : un groupe d'amis pour une édition. Son créateur (ownerUid) en est l'admin. */
+/**
+ * parties/{id} : un groupe d'amis pour une édition. ownerUid = son admin : le créateur au départ,
+ * puis celui à qui il a transmis le rôle.
+ */
 export interface Party {
   id: string
   editionId: string
@@ -49,8 +52,8 @@ export interface Party {
   /** Code d'invitation (6 caractères), lisible par les membres. */
   code: string
   status: PartyStatus
-  /** Nombre de changements de phase (= nombre d'entrées dans events). */
-  statusChanges: number
+  /** Nombre d'entrées du journal (changements de phase et transmissions d'admin). */
+  eventCount: number
   createdAt: Date | null
 }
 
@@ -63,12 +66,15 @@ export interface Membership {
   hasPicked: boolean
 }
 
-/** parties/{p}/events/{n} : journal des changements de phase, immuable, visible des membres. */
-export interface PartyEvent {
+/** parties/{p}/events/{n} : journal immuable, visible des membres. */
+export type PartyEvent =
+  | (PartyEventBase & { type: 'status'; from: PartyStatus; to: PartyStatus })
+  /** transmission du rôle d'admin : from / to = uid de l'ancien et du nouvel admin */
+  | (PartyEventBase & { type: 'owner'; from: string; to: string })
+
+export interface PartyEventBase {
   n: number
-  from: PartyStatus
-  to: PartyStatus
-  /** uid de l'admin (ou du super admin) qui a changé la phase */
+  /** uid de l'admin (ou du super admin) qui a fait le changement */
   by: string
   at: Date | null
 }

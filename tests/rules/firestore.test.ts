@@ -73,7 +73,7 @@ async function createBatch(
     ownerUid: uid,
     code,
     status: 'open',
-    statusChanges: 0,
+    eventCount: 0,
     createdAt: serverTimestamp(),
     ...over.party,
   })
@@ -87,8 +87,25 @@ async function createBatch(
 /** Change de phase comme le fait setPartyStatus (party + events/{n} dans le même batch). */
 async function setStatus(db: Firestore, uid: string, from: string, to: string, n: number, event: Record<string, unknown> = {}) {
   const b = writeBatch(db)
-  b.update(partyDoc(db), { status: to, statusChanges: n })
-  b.set(sub(db, 'events', String(n)), { from, to, by: uid, at: serverTimestamp(), ...event })
+  b.update(partyDoc(db), { status: to, eventCount: n })
+  b.set(sub(db, 'events', String(n)), { type: 'status', from, to, by: uid, at: serverTimestamp(), ...event })
+  return b.commit()
+}
+
+/** Transmet le rôle d'admin comme le fait transferOwnership (party + events/{n}). */
+async function transfer(db: Firestore, uid: string, from: string, to: string, n: number, event: Record<string, unknown> = {}) {
+  const b = writeBatch(db)
+  b.update(partyDoc(db), { ownerUid: to, eventCount: n })
+  b.set(sub(db, 'events', String(n)), { type: 'owner', from, to, by: uid, at: serverTimestamp(), ...event })
+  return b.commit()
+}
+
+/** Supprime la party comme le fait deleteParty (adhésions + code + party). */
+async function deletePartyBatch(db: Firestore, opts: { keepMembers?: boolean; keepCode?: boolean } = {}) {
+  const b = writeBatch(db)
+  if (!opts.keepMembers) for (const uid of ['olga', 'alice', 'bob']) b.delete(sub(db, 'members', uid))
+  if (!opts.keepCode) b.delete(doc(db, 'partyCodes', CODE))
+  b.delete(partyDoc(db))
   return b.commit()
 }
 
@@ -107,7 +124,7 @@ async function seed() {
         ownerUid: owner,
         code,
         status: 'open',
-        statusChanges: 0,
+        eventCount: 0,
         createdAt: Timestamp.now(),
       })
       await setDoc(doc(db, 'partyCodes', code), { partyId: p, editionId: E })
@@ -162,7 +179,7 @@ describe('création de party', () => {
 
   it('refuse une party qui ne démarre pas ouverte à zéro', async () => {
     await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { party: { status: 'closed' } }))
-    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { party: { statusChanges: 3 } }))
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { party: { eventCount: 3 } }))
   })
 
   it('refuse un code mal formé, une édition invalide ou un nom invalide', async () => {
@@ -410,16 +427,100 @@ describe('membres et hasPicked', () => {
   })
 
   it('laisse l’admin de la party et le super admin retirer un membre, pas les autres', async () => {
-    await assertFails(deleteDoc(member('alice')))
     await assertFails(deleteDoc(member('alice', 'bob')))
     await assertFails(deleteDoc(member('dan', 'bob')))
     await assertSucceeds(deleteDoc(member('olga', 'alice')))
     await assertSucceeds(deleteDoc(member('boss', 'bob')))
   })
 
-  it('interdit de retirer le créateur de la party', async () => {
+  it('interdit de retirer l’admin de la party, ou qu’il parte sans transmettre son rôle', async () => {
     await assertFails(deleteDoc(member('olga')))
     await assertFails(deleteDoc(member('boss', 'olga')))
+  })
+})
+
+describe('quitter une party', () => {
+  it('laisse un membre quitter la party quand il veut, même après la fermeture', async () => {
+    await assertSucceeds(deleteDoc(sub(dbAs('alice'), 'members', 'alice')))
+    await setStatusRaw('closed')
+    await assertSucceeds(deleteDoc(sub(dbAs('bob'), 'members', 'bob')))
+    await assertFails(getDocs(collection(dbAs('bob'), 'parties', P, 'picks')))
+  })
+
+  it('retrouve son prono en revenant, avec hasPicked fidèle', async () => {
+    await assertSucceeds(pick(dbAs('alice'), 'alice', 'corse', 1))
+    await assertSucceeds(deleteDoc(sub(dbAs('alice'), 'members', 'alice')))
+    await assertFails(joinBatch(dbAs('alice'), 'alice', CODE, { hasPicked: false }))
+    await assertSucceeds(joinBatch(dbAs('alice'), 'alice', CODE, { hasPicked: true }))
+  })
+})
+
+describe('transmission du rôle d’admin', () => {
+  it('laisse l’admin transmettre son rôle à un membre, journalisé', async () => {
+    await assertSucceeds(transfer(dbAs('olga'), 'olga', 'olga', 'alice', 1))
+    const event = await getDoc(sub(dbAs('bob'), 'events', '1'))
+    expect(event.data()).toMatchObject({ type: 'owner', from: 'olga', to: 'alice', by: 'olga' })
+  })
+
+  it('donne les droits au nouvel admin et les retire à l’ancien', async () => {
+    await assertSucceeds(transfer(dbAs('olga'), 'olga', 'olga', 'alice', 1))
+    await assertFails(setStatus(dbAs('olga'), 'olga', 'open', 'closed', 2))
+    await assertSucceeds(setStatus(dbAs('alice'), 'alice', 'open', 'closed', 2))
+    // l'ancien admin peut maintenant partir
+    await assertSucceeds(deleteDoc(sub(dbAs('olga'), 'members', 'olga')))
+  })
+
+  it('refuse de transmettre à un non-membre', async () => {
+    await assertFails(transfer(dbAs('olga'), 'olga', 'olga', 'carol', 1))
+  })
+
+  it('refuse une transmission par un simple membre', async () => {
+    await assertFails(transfer(dbAs('alice'), 'alice', 'olga', 'alice', 1))
+  })
+
+  it('refuse une transmission sans journal, ou avec un journal faussé', async () => {
+    await assertFails(updateDoc(partyDoc(dbAs('olga')), { ownerUid: 'alice' }))
+    await assertFails(updateDoc(partyDoc(dbAs('olga')), { ownerUid: 'alice', eventCount: 1 }))
+    await assertFails(transfer(dbAs('olga'), 'olga', 'bob', 'alice', 1))
+    await assertFails(transfer(dbAs('olga'), 'olga', 'olga', 'alice', 1, { type: 'status' }))
+  })
+
+  it('refuse de changer de phase et d’admin dans la même écriture', async () => {
+    const olga = dbAs('olga')
+    const b = writeBatch(olga)
+    b.update(partyDoc(olga), { ownerUid: 'alice', status: 'closed', eventCount: 1 })
+    b.set(sub(olga, 'events', '1'), { type: 'owner', from: 'olga', to: 'alice', by: 'olga', at: serverTimestamp() })
+    await assertFails(b.commit())
+  })
+
+  it('laisse le super admin réattribuer le rôle', async () => {
+    await assertSucceeds(transfer(dbAs('boss'), 'boss', 'olga', 'bob', 1))
+  })
+})
+
+describe('suppression d’une party', () => {
+  it('laisse l’admin supprimer sa party, son code et les adhésions', async () => {
+    await assertSucceeds(deletePartyBatch(dbAs('olga')))
+    await assertFails(getDoc(partyDoc(dbAs('alice'))))
+    let codeExists = true
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      codeExists = (await getDoc(doc(ctx.firestore() as unknown as Firestore, 'partyCodes', CODE))).exists()
+    })
+    expect(codeExists).toBe(false)
+  })
+
+  it('laisse le super admin supprimer n’importe quelle party', async () => {
+    await assertSucceeds(deletePartyBatch(dbAs('boss')))
+  })
+
+  it('refuse la suppression par un membre ou l’admin d’une autre party', async () => {
+    await assertFails(deletePartyBatch(dbAs('alice')))
+    await assertFails(deletePartyBatch(dbAs('dan')))
+    await assertFails(deleteDoc(partyDoc(dbAs('alice'))))
+  })
+
+  it('refuse de libérer le code sans supprimer la party', async () => {
+    await assertFails(deleteDoc(doc(dbAs('olga'), 'partyCodes', CODE)))
   })
 })
 
@@ -438,7 +539,7 @@ describe('phases et journal', () => {
   })
 
   it('refuse un changement de phase sans entrée au journal', async () => {
-    await assertFails(updateDoc(partyDoc(dbAs('olga')), { status: 'closed', statusChanges: 1 }))
+    await assertFails(updateDoc(partyDoc(dbAs('olga')), { status: 'closed', eventCount: 1 }))
     await assertFails(updateDoc(partyDoc(dbAs('olga')), { status: 'closed' }))
   })
 
@@ -479,9 +580,13 @@ describe('phases et journal', () => {
     await assertFails(updateDoc(partyDoc(olga), { editionId: '2028' }))
   })
 
-  it('ne laisse supprimer une party qu’au super admin', async () => {
-    await assertFails(deleteDoc(partyDoc(dbAs('olga'))))
-    await assertSucceeds(deleteDoc(partyDoc(dbAs('boss'))))
+  it('refuse une entrée de journal sans type ou d’un type inconnu', async () => {
+    const olga = dbAs('olga')
+    const b = writeBatch(olga)
+    b.update(partyDoc(olga), { status: 'closed', eventCount: 1 })
+    b.set(sub(olga, 'events', '1'), { from: 'open', to: 'closed', by: 'olga', at: serverTimestamp() })
+    await assertFails(b.commit())
+    await assertFails(setStatus(olga, 'olga', 'open', 'closed', 1, { type: 'magie' }))
   })
 })
 

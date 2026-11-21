@@ -57,6 +57,13 @@ Ne remets pas ces points en question sans l'accord du porteur du projet. Ajoute 
 | 2026-11-21 | Le **code d'une party est visible de tous ses membres** (pour inviter), jamais listable par les autres | Comme un lien d'invitation de groupe ; choix du porteur |
 | 2026-11-21 | **Réouverture des pronos permise mais journalisée** : chaque changement de phase est écrit dans un journal immuable visible des membres | L'admin joue aussi : la transparence remplace l'interdiction ; choix du porteur |
 | 2026-11-21 | **Avant la fermeture, personne ne voit les pronos des autres**, ni l'admin de la party ni le super admin | L'admin de la party est aussi joueur |
+| 2026-11-21 | Un membre peut **quitter** la party quand il veut, après une popup de confirmation ; son prono reste (il le retrouve s'il revient). L'admin doit d'abord transmettre son rôle | Choix du porteur |
+| 2026-11-21 | L'admin peut **transmettre son rôle** à un autre membre (journalisé) | Pas de party bloquée si son créateur disparaît |
+| 2026-11-21 | L'admin peut **supprimer sa party**, avec une double confirmation à la GitHub : recopier « je confirme la suppression de la party » | Choix du porteur |
+| 2026-11-21 | **Sauvegarde** : bouton super admin qui télécharge un JSON, à faire après chaque soirée | Aucune sauvegarde automatique sur Spark ; procédé le plus simple |
+| 2026-11-21 | Le porteur prépare lui-même, en amont, les données de chaque nouvelle édition | Choix du porteur |
+| 2026-11-21 | Inscription ouverte à tout compte : sans code, on ne voit aucune party | Choix du porteur |
+| 2026-11-21 | Emailing propre (mot de passe oublié hors spam) : plus tard, selon l'avancement | Un plus, pas un prérequis |
 
 ## 4. Règles du jeu (résumé ; le détail est dans SPEC.md)
 
@@ -68,6 +75,8 @@ Ne remets pas ces points en question sans l'accord du porteur du projet. Ajoute 
 6. À la fin, chacun reçoit 🥇, 🥈, 🥉 ou rien, selon la place de sa candidate. Les trophées restent sur le profil d'année en année.
 
 **Phases d'une party** : `open` → `closed` → `finished`. Seuls l'admin de la party et le super admin les changent. Le retour en arrière est permis, et chaque changement de phase est journalisé, visible de tous les membres.
+
+**Vie d'une party** : un membre peut la quitter (confirmation) ; l'admin peut transmettre son rôle (journalisé), retirer un membre, ou supprimer la party (phrase à recopier). Détail dans SPEC.md.
 
 ## 5. Écrans
 
@@ -139,7 +148,8 @@ Règles de collaboration :
 **Jalon J1 Fondations terminé sur la branche `wip/fondations` (pas encore fusionnée dans `dev`) :**
 - Scaffold Vite/React/TS/PWA, `firebase.json`, `.firebaserc` (missfrancebet), le composant `Sash`, des pages placeholder pour toutes les routes, le README avec la mise en ligne pas à pas
 - **Modèle par party** (décisions du 21/11) : `src/lib` (le contrat, API dans `docs/ARCHITECTURE.md`), `firestore.rules`, `firestore.indexes.json`, `src/data/editions/2027/edition.json`
-- `typecheck`, `lint` et `build` passent ; 7/7 tests unitaires ; **59/59 tests des règles sur l'émulateur**, contrôlés par mutation (casser une règle fait échouer un test)
+- Quitter, transmettre le rôle d'admin, supprimer une party (double confirmation), sauvegarde JSON super admin
+- `typecheck`, `lint` et `build` passent ; 7/7 tests unitaires ; **72/72 tests des règles sur l'émulateur**, contrôlés par mutation (casser une règle fait échouer un test)
 - Sous Windows : JDK 21 requis pour l'émulateur, et vitest à lancer depuis un chemin `C:\` en majuscule (voir ARCHITECTURE.md)
 - Limites connues : voir "Reste à faire" dans `docs/ARCHITECTURE.md` (écrans à construire, retour après connexion pour les liens d'invitation, bundle de 900 kB, `Sash` jamais vu dans un navigateur)
 
@@ -150,7 +160,7 @@ Règles de collaboration :
 
 ## 10. Préparer l'édition suivante (2028 et après), même sans le porteur
 
-C'est la **seule tâche annuelle**, à faire par quelqu'un qui sait lancer un script et déployer (le README guide pas à pas) :
+C'est la **seule tâche annuelle**. Le porteur la fait lui-même en amont ; à défaut, quelqu'un qui sait lancer un script et déployer (le README guide pas à pas) :
 1. Récupérer la liste des candidates (une Sheet à jour) et leurs photos (zip).
 2. Générer `src/data/editions/<année>/candidates.json` et `public/candidates/<année>/*.webp` avec `scripts/prep_data.py` (à adapter : liste des candidates, année, nommage des photos).
 3. Écrire `src/data/editions/<année>/edition.json` (`editionId`, `title`, `showAt` avec fuseau).
@@ -163,4 +173,5 @@ Il faut aussi que quelqu'un d'autre que le porteur ait accès au projet Firebase
 
 - Si l'ID `missfrancebet` est déjà pris chez Firebase, on garde un ID de projet différent et on crée un site Hosting supplémentaire nommé `missfrancebet` (ce qui est possible sur Spark).
 - L'identité visuelle finale reste à valider par le porteur sur les premiers écrans.
-- Qui, parmi les amis, aura accès au projet Firebase et au dépôt pour déployer l'édition 2028 si le porteur n'est pas là ?
+- Ajouter une validation des membres par l'admin, ou une régénération du code d'invitation ? (question en cours)
+- Date et heure exactes de l'émission 2027 (21h10 provisoire) : à reconfirmer par le porteur.

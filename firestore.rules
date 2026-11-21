@@ -172,7 +172,12 @@ service cloud.firestore {
         && getAfter(partyPath(request.resource.data.partyId)).data.editionId == request.resource.data.editionId;
 
       allow update: if false;
-      allow delete: if isSuperAdmin();
+
+      // Libéré quand la party est supprimée (même batch), par son admin ; ou par le super admin.
+      allow delete: if isSuperAdmin()
+        || (signedIn()
+          && get(partyPath(resource.data.partyId)).data.ownerUid == request.auth.uid
+          && !existsAfter(partyPath(resource.data.partyId)));
     }
 
     // Requête collection group « mes adhésions » (members où uid == moi).
@@ -189,46 +194,65 @@ service cloud.firestore {
       // Création : le créateur devient admin et membre ; le code est réservé dans le même batch.
       allow create: if signedIn()
         && exactKeys(request.resource.data,
-             ['editionId', 'name', 'ownerUid', 'code', 'status', 'statusChanges', 'createdAt'])
+             ['editionId', 'name', 'ownerUid', 'code', 'status', 'eventCount', 'createdAt'])
         && validEditionId(request.resource.data.editionId)
         && validPartyName(request.resource.data.name)
         && request.resource.data.ownerUid == request.auth.uid
         && validCode(request.resource.data.code)
         && request.resource.data.status == 'open'
-        && request.resource.data.statusChanges == 0
+        && request.resource.data.eventCount == 0
         && request.resource.data.createdAt == request.time
         && getAfter(/databases/$(database)/documents/partyCodes/$(request.resource.data.code)).data.partyId == p
         && existsAfter(/databases/$(database)/documents/parties/$(p)/members/$(request.auth.uid));
 
-      // Admin de la party ou super admin : renommer, changer de phase.
-      // Tout changement de phase incrémente statusChanges et écrit events/{n} dans le même batch.
+      // Admin de la party ou super admin : renommer, changer de phase, transmettre le rôle d'admin.
+      // Changer de phase ou d'admin (jamais les deux à la fois) incrémente eventCount et écrit
+      // events/{n} dans le même batch. Le nouvel admin doit être membre.
       allow update: if canManage(p)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'status', 'statusChanges'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'status', 'ownerUid', 'eventCount'])
         && validPartyName(request.resource.data.name)
         && request.resource.data.status in ['open', 'closed', 'finished']
         && (
+          // renommage seul
           (request.resource.data.status == resource.data.status
-            && request.resource.data.statusChanges == resource.data.statusChanges)
+            && request.resource.data.ownerUid == resource.data.ownerUid
+            && request.resource.data.eventCount == resource.data.eventCount)
+          // changement de phase
           || (request.resource.data.status != resource.data.status
-            && request.resource.data.statusChanges == resource.data.statusChanges + 1
-            && existsAfter(/databases/$(database)/documents/parties/$(p)/events/$(string(request.resource.data.statusChanges))))
+            && request.resource.data.ownerUid == resource.data.ownerUid
+            && request.resource.data.eventCount == resource.data.eventCount + 1
+            && existsAfter(/databases/$(database)/documents/parties/$(p)/events/$(string(request.resource.data.eventCount))))
+          // transmission du rôle d'admin
+          || (request.resource.data.ownerUid != resource.data.ownerUid
+            && request.resource.data.status == resource.data.status
+            && request.resource.data.eventCount == resource.data.eventCount + 1
+            && exists(/databases/$(database)/documents/parties/$(p)/members/$(request.resource.data.ownerUid))
+            && existsAfter(/databases/$(database)/documents/parties/$(p)/events/$(string(request.resource.data.eventCount))))
         );
 
-      allow delete: if isSuperAdmin();
+      // Suppression : admin de la party ou super admin (double confirmation dans l'interface).
+      allow delete: if canManage(p);
 
-      // ---------- Journal des phases ----------
+      // ---------- Journal ----------
 
       // events/{n} : création seule, cohérente avec la party écrite dans le même batch.
+      // type 'status' : from/to = phases ; type 'owner' : from/to = uid de l'ancien et du nouvel admin.
       match /events/{n} {
         allow read: if isMember(p) || isSuperAdmin();
         allow create: if canManage(p)
-          && exactKeys(request.resource.data, ['from', 'to', 'by', 'at'])
+          && exactKeys(request.resource.data, ['type', 'from', 'to', 'by', 'at'])
           && request.resource.data.by == request.auth.uid
           && request.resource.data.at == request.time
-          && request.resource.data.from == partyData(p).status
-          && request.resource.data.to == getAfter(partyPath(p)).data.status
           && request.resource.data.from != request.resource.data.to
-          && string(getAfter(partyPath(p)).data.statusChanges) == n;
+          && string(getAfter(partyPath(p)).data.eventCount) == n
+          && (
+            (request.resource.data.type == 'status'
+              && request.resource.data.from == partyData(p).status
+              && request.resource.data.to == getAfter(partyPath(p)).data.status)
+            || (request.resource.data.type == 'owner'
+              && request.resource.data.from == partyData(p).ownerUid
+              && request.resource.data.to == getAfter(partyPath(p)).data.ownerUid)
+          );
         allow update, delete: if false;
       }
 
@@ -245,7 +269,8 @@ service cloud.firestore {
           && exactKeys(request.resource.data, ['uid', 'editionId', 'joinedAt', 'hasPicked'])
           && request.resource.data.uid == uid
           && request.resource.data.joinedAt == request.time
-          && request.resource.data.hasPicked == false
+          // false à la première arrivée ; true si je reviens et que mon prono est resté.
+          && request.resource.data.hasPicked == exists(/databases/$(database)/documents/parties/$(p)/picks/$(uid))
           && request.resource.data.editionId == getAfter(partyPath(p)).data.editionId
           && (
             (!exists(partyPath(p)) && getAfter(partyPath(p)).data.ownerUid == uid)
@@ -260,8 +285,12 @@ service cloud.firestore {
           && request.resource.data.hasPicked == true
           && existsAfter(/databases/$(database)/documents/parties/$(p)/picks/$(uid));
 
-        // L'admin retire un membre ; le créateur ne peut pas être retiré.
-        allow delete: if canManage(p) && uid != partyData(p).ownerUid;
+        // Quitter (soi-même) ou être retiré (par l'admin ou le super admin). L'admin ne peut ni
+        // partir ni être retiré : il transmet d'abord son rôle. Exception : la suppression de la
+        // party, où toutes les adhésions partent dans le même batch que la party.
+        allow delete: if (isSelf(uid) && uid != partyData(p).ownerUid)
+          || (canManage(p) && uid != partyData(p).ownerUid)
+          || (canManage(p) && !existsAfter(partyPath(p)));
       }
 
       // Preuve temporaire du code, écrite avec l'adhésion puis supprimée aussitôt par le client.
