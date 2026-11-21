@@ -1,0 +1,404 @@
+// Saisie des résultats pendant l'émission (admin de la party) : top 15, puis top 5, puis podium.
+// Chaque étape est un brouillon local, enregistré d'un coup quand il est complet : les joueurs ne
+// voient jamais un top 15 à moitié saisi (qui éliminerait à tort les candidates pas encore cochées).
+import { useState } from 'react'
+import { errorMessage, listCandidates, missLabel, setResults, type Candidate, type Results } from '../lib'
+import { ConfirmDialog } from './ConfirmDialog'
+import './ResultsEditor.css'
+
+type Step = 'top15' | 'top5' | 'podium'
+type Patch = Parameters<typeof setResults>[1]
+
+const PODIUM_SLOTS = [
+  { key: 'winner', label: 'Miss France' },
+  { key: 'firstRunnerUp', label: '1re dauphine' },
+  { key: 'secondRunnerUp', label: '2e dauphine' },
+] as const
+
+const STEP_LABEL: Record<Step, string> = { top15: 'Top 15', top5: 'Top 5', podium: 'Podium' }
+
+function firstStep(r: Results): Step {
+  if (!r.top15) return 'top15'
+  if (!r.top5) return 'top5'
+  return 'podium'
+}
+
+function podiumOf(r: Results): (string | null)[] {
+  return [r.winner, r.firstRunnerUp, r.secondRunnerUp]
+}
+
+const NO_PODIUM: Patch = { winner: null, firstRunnerUp: null, secondRunnerUp: null }
+
+export interface ResultsEditorProps {
+  partyId: string
+  editionId: string
+  results: Results
+  /** Appelé après l'enregistrement du podium (pour proposer de terminer la soirée). */
+  onPodiumSaved?: () => void
+}
+
+export function ResultsEditor({ partyId, editionId, results, onPodiumSaved }: ResultsEditorProps) {
+  const candidates = listCandidates(editionId)
+  const [chosen, setStep] = useState<Step>(() => firstStep(results))
+  const done: Record<Step, boolean> = {
+    top15: !!results.top15,
+    top5: !!results.top5,
+    podium: !!results.winner,
+  }
+  const available: Record<Step, boolean> = { top15: true, top5: done.top15, podium: done.top5 }
+  // Si une étape précédente vient d'être effacée, on revient à la première étape incomplète.
+  const step = available[chosen] ? chosen : firstStep(results)
+  const byId = new Map(candidates.map((c) => [c.id, c]))
+  const pool = (ids: string[] | null) => (ids ?? []).map((id) => byId.get(id)).filter((c): c is Candidate => !!c)
+
+  async function save(patch: Patch, next?: Step) {
+    await setResults(partyId, patch)
+    if (next) setStep(next)
+  }
+
+  // La clé remet le brouillon à zéro quand les résultats enregistrés changent.
+  const version = `${step}-${results.updatedAt?.getTime() ?? 0}`
+
+  return (
+    <div className="results">
+      <div className="results__steps" role="group" aria-label="Étape de saisie">
+        {(['top15', 'top5', 'podium'] as Step[]).map((s, i) => (
+          <button
+            key={s}
+            type="button"
+            className="results__step"
+            aria-pressed={step === s}
+            disabled={!available[s]}
+            onClick={() => setStep(s)}
+          >
+            <span className="results__step-num" aria-hidden="true">
+              {done[s] ? '✓' : i + 1}
+            </span>
+            {STEP_LABEL[s]}
+            {done[s] && <span className="visually-hidden"> (saisi)</span>}
+          </button>
+        ))}
+      </div>
+
+      {step === 'top15' && (
+        <SubsetStep
+          key={version}
+          label="top 15"
+          size={15}
+          pool={candidates}
+          saved={results.top15}
+          onSave={(ids) => {
+            const patch: Patch = { top15: ids }
+            // Ce qui suit doit rester inclus dans le nouveau top 15.
+            if (results.top5 && !results.top5.every((id) => ids.includes(id))) Object.assign(patch, { top5: null }, NO_PODIUM)
+            else if (podiumOf(results).some((id) => id && !ids.includes(id))) Object.assign(patch, NO_PODIUM)
+            return save(patch, 'top5')
+          }}
+          onClear={() => save({ top15: null, top5: null, ...NO_PODIUM })}
+        />
+      )}
+      {step === 'top5' && (
+        <SubsetStep
+          key={version}
+          label="top 5"
+          size={5}
+          pool={pool(results.top15)}
+          saved={results.top5}
+          onSave={(ids) => {
+            const patch: Patch = { top5: ids }
+            if (podiumOf(results).some((id) => id && !ids.includes(id))) Object.assign(patch, NO_PODIUM)
+            return save(patch, 'podium')
+          }}
+          onClear={() => save({ top5: null, ...NO_PODIUM })}
+        />
+      )}
+      {step === 'podium' && (
+        <PodiumStep
+          key={version}
+          pool={pool(results.top5)}
+          saved={podiumOf(results)}
+          onSave={async ([winner, firstRunnerUp, secondRunnerUp]) => {
+            await save({ winner, firstRunnerUp, secondRunnerUp })
+            onPodiumSaved?.()
+          }}
+          onClear={() => save(NO_PODIUM)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ---------- Étapes ----------
+
+function CandidateTile({
+  candidate,
+  selected,
+  disabled,
+  badge,
+  onToggle,
+}: {
+  candidate: Candidate
+  selected: boolean
+  disabled?: boolean
+  badge?: string
+  onToggle: () => void
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        className="result-tile"
+        aria-pressed={selected}
+        disabled={disabled}
+        onClick={onToggle}
+      >
+        <img className="result-tile__photo" src={candidate.photo} alt="" loading="lazy" decoding="async" />
+        <span className="result-tile__region">{candidate.region}</span>
+        {selected && (
+          <span className="result-tile__badge" aria-hidden="true">
+            {badge ?? '✓'}
+          </span>
+        )}
+      </button>
+    </li>
+  )
+}
+
+function useSaving() {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function run(fn: () => Promise<void>) {
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return { busy, error, run }
+}
+
+function StepFooter({
+  count,
+  size,
+  ready,
+  dirty,
+  busy,
+  saveLabel,
+  onSave,
+}: {
+  count: number
+  size: number
+  ready: boolean
+  dirty: boolean
+  busy: boolean
+  saveLabel: string
+  onSave: () => void
+}) {
+  return (
+    <div className="results__bar">
+      <p className="results__count" aria-live="polite">
+        <strong>
+          {count}/{size}
+        </strong>{' '}
+        <span className="muted">{dirty ? 'pas encore enregistré' : 'enregistré'}</span>
+      </p>
+      <button type="button" className="button button--action" disabled={!ready || !dirty || busy} onClick={onSave}>
+        {busy ? 'Un instant…' : saveLabel}
+      </button>
+    </div>
+  )
+}
+
+function ClearButton({ label, saved, onClear }: { label: string; saved: boolean; onClear: () => Promise<void> }) {
+  const [open, setOpen] = useState(false)
+  if (!saved) return null
+  return (
+    <>
+      <button type="button" className="button button--ghost results__clear" onClick={() => setOpen(true)}>
+        Effacer le {label}
+      </button>
+      <ConfirmDialog
+        open={open}
+        title={`Effacer le ${label} ?`}
+        confirmLabel={`Effacer le ${label}`}
+        onCancel={() => setOpen(false)}
+        onConfirm={async () => {
+          await onClear()
+          setOpen(false)
+        }}
+      >
+        <p>Tous les joueurs de la party le verront disparaître aussitôt, ainsi que les étapes qui suivent.</p>
+      </ConfirmDialog>
+    </>
+  )
+}
+
+function SubsetStep({
+  label,
+  size,
+  pool,
+  saved,
+  onSave,
+  onClear,
+}: {
+  label: string
+  size: number
+  pool: Candidate[]
+  saved: string[] | null
+  onSave: (ids: string[]) => Promise<void>
+  onClear: () => Promise<void>
+}) {
+  const [draft, setDraft] = useState<string[]>(() => saved ?? [])
+  const { busy, error, run } = useSaving()
+  const full = draft.length >= size
+  const dirty = !saved || saved.length !== draft.length || saved.some((id) => !draft.includes(id))
+
+  function toggle(id: string) {
+    setDraft((d) => (d.includes(id) ? d.filter((x) => x !== id) : d.length < size ? [...d, id] : d))
+  }
+
+  return (
+    <div className="results__panel">
+      <p className="muted">
+        Touche les {size} candidates du {label} au fur et à mesure de l'annonce, puis enregistre. Les joueurs ne
+        voient rien tant que tu n'as pas enregistré.
+      </p>
+      <ul className="result-tiles" aria-label={`Candidates, ${draft.length} sur ${size} cochées`}>
+        {pool.map((c) => {
+          const selected = draft.includes(c.id)
+          return (
+            <CandidateTile
+              key={c.id}
+              candidate={c}
+              selected={selected}
+              disabled={busy || (full && !selected)}
+              onToggle={() => toggle(c.id)}
+            />
+          )
+        })}
+      </ul>
+      {error && (
+        <p className="results__error" role="alert">
+          {error}
+        </p>
+      )}
+      <ClearButton label={label} saved={!!saved} onClear={onClear} />
+      <StepFooter
+        count={draft.length}
+        size={size}
+        ready={draft.length === size}
+        dirty={dirty}
+        busy={busy}
+        saveLabel={`Enregistrer le ${label}`}
+        onSave={() => void run(() => onSave(draft))}
+      />
+    </div>
+  )
+}
+
+function PodiumStep({
+  pool,
+  saved,
+  onSave,
+  onClear,
+}: {
+  pool: Candidate[]
+  saved: (string | null)[]
+  onSave: (podium: [string, string, string]) => Promise<void>
+  onClear: () => Promise<void>
+}) {
+  const [draft, setDraft] = useState<(string | null)[]>(() => saved)
+  // On suit l'ordre de l'annonce : 2e dauphine, puis 1re dauphine, puis Miss France.
+  const [slot, setSlot] = useState(() => Math.max(0, saved.lastIndexOf(null)))
+  const { busy, error, run } = useSaving()
+  const byId = new Map(pool.map((c) => [c.id, c]))
+  const count = draft.filter(Boolean).length
+  const dirty = draft.some((id, i) => id !== saved[i])
+
+  function nextEmpty(d: (string | null)[], from: number) {
+    for (let k = 1; k <= 3; k++) {
+      const i = (from - k + 3) % 3
+      if (!d[i]) return i
+    }
+    return from
+  }
+
+  function pick(id: string) {
+    const at = draft.indexOf(id)
+    if (at >= 0) {
+      // Déjà placée : on la retire et on se remet sur sa place, pour corriger.
+      setDraft(draft.map((x, i) => (i === at ? null : x)))
+      setSlot(at)
+      return
+    }
+    const next = draft.map((x, i) => (i === slot ? id : x))
+    setDraft(next)
+    setSlot(nextEmpty(next, slot))
+  }
+
+  return (
+    <div className="results__panel">
+      <p className="muted">
+        Touche les candidates dans l'ordre de l'annonce : 2e dauphine, 1re dauphine, puis Miss France. Pour
+        corriger, touche une place puis la candidate.
+      </p>
+      <div className="podium-slots" role="group" aria-label="Place à remplir">
+        {PODIUM_SLOTS.map((s, i) => {
+          const c = draft[i] ? byId.get(draft[i]!) : null
+          return (
+            <button
+              key={s.key}
+              type="button"
+              className={`podium-slot podium-slot--${s.key}`}
+              aria-pressed={slot === i}
+              onClick={() => setSlot(i)}
+              disabled={busy}
+            >
+              <span className="podium-slot__label">{s.label}</span>
+              <span className="podium-slot__value">{c ? c.region : 'à choisir'}</span>
+            </button>
+          )
+        })}
+      </div>
+      <ul className="result-tiles" aria-label={`Candidates du top 5, place à remplir : ${PODIUM_SLOTS[slot]?.label ?? ''}`}>
+        {pool.map((c) => {
+          const at = draft.indexOf(c.id)
+          return (
+            <CandidateTile
+              key={c.id}
+              candidate={c}
+              selected={at >= 0}
+              badge={at >= 0 ? String(at + 1) : undefined}
+              disabled={busy}
+              onToggle={() => pick(c.id)}
+            />
+          )
+        })}
+      </ul>
+      <p className="visually-hidden" aria-live="polite">
+        {PODIUM_SLOTS.map((s, i) => `${s.label} : ${draft[i] ? missLabel(byId.get(draft[i]!)!) : 'à choisir'}`).join(
+          ', ',
+        )}
+      </p>
+      {error && (
+        <p className="results__error" role="alert">
+          {error}
+        </p>
+      )}
+      <ClearButton label="podium" saved={!!saved[0]} onClear={onClear} />
+      <StepFooter
+        count={count}
+        size={3}
+        ready={count === 3}
+        dirty={dirty}
+        busy={busy}
+        saveLabel="Enregistrer le podium"
+        onSave={() => void run(() => onSave(draft as [string, string, string]))}
+      />
+    </div>
+  )
+}
