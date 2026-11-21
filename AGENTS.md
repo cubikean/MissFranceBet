@@ -136,8 +136,8 @@ Règles de collaboration :
 |---|---|---|
 | J0 | Cadrage, données, design, spec | 21/11 ✅ |
 | J1 | Fondations : scaffold, Firebase, règles et tests | 21/11 ✅ |
-| J2 | Écrans joueur + gestion | 21/11 ✅ (code écrit, pas encore vu dans un navigateur) |
-| J3 | QA, corrections, mise en ligne sur Firebase (projet créé par le porteur) | 27/11 |
+| J2 | Écrans joueur + gestion | 21/11 ✅ |
+| J3 | QA, corrections, mise en ligne sur Firebase (projet créé par le porteur) | 27/11 — en ligne ✅, QA à lancer |
 | J4 | Répétition générale : le porteur et 2–3 amis jouent une party de test complète (inscription → création de party → invitation → prono → fermeture → résultats) | 29/11 |
 | J5 | Création de la party 2027 réelle et envoi du lien d'invitation aux amis | ≤ 05/12 |
 | J6 | Soirée : l'admin de la party (le porteur) saisit les résultats pendant l'émission | 12/12 |
@@ -145,23 +145,22 @@ Règles de collaboration :
 
 ## 9 bis. État du projet et reprise (mis à jour le 21/11/2026)
 
-**Fait et poussé sur `dev` :**
-- Cadrage : ce fichier, `docs/SPEC.md`, `docs/DESIGN.md`
-- Données 2027 : `src/data/editions/2027/candidates.json` (31 candidates) et `public/candidates/2027/*.webp`
-- `scripts/prep_data.py`, qui régénère ces données à partir des photos
+**En ligne sur https://missfrancebet.web.app** (projet Firebase `missfrancebet`, plan Spark), déployé depuis `dev` pour la phase de test. Connexion Google opérationnelle (client OAuth configuré, voir README étape 3). Le porteur est super admin.
 
-**Jalon J1 Fondations terminé et fusionné dans `dev` :**
-- Scaffold Vite/React/TS/PWA, `firebase.json`, `.firebaserc` (missfrancebet), le composant `Sash`, des pages placeholder pour toutes les routes, le README avec la mise en ligne pas à pas
-- **Modèle par party** (décisions du 21/11) : `src/lib` (le contrat, API dans `docs/ARCHITECTURE.md`), `firestore.rules`, `firestore.indexes.json`, `src/data/editions/2027/edition.json`
-- Quitter, transmettre le rôle d'admin, supprimer une party (double confirmation), changer le code d'invitation, sauvegarde JSON super admin, App Check (activé dès qu'une clé reCAPTCHA est fournie)
-- Skill de design `ui-ux-pro-max` installée pour les agents d'interface
-- `typecheck`, `lint` et `build` passent ; 7/7 tests unitaires ; **78/78 tests des règles sur l'émulateur**, contrôlés par mutation (casser une règle fait échouer un test)
+**Fait (sur `dev`) :**
+- Cadrage (`AGENTS.md`, `docs/SPEC.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md`), données 2027 (31 candidates, photos), `scripts/prep_data.py`
+- Fondations : modèle par party dans `src/lib` (le contrat), `firestore.rules` + **83 tests sur l'émulateur**, contrôlés par mutation ; App Check prêt (inactif tant qu'aucune clé reCAPTCHA n'est fournie)
+- Tous les écrans joueur et de gestion, avec les composants partagés (`CandidateCard`, `ConfirmDialog`, `PartyJournal`, `ResultsEditor`, `InviteShare`, `Avatar`, `PhotoPicker`, `Toast`, `Confetti`, `InstallBanner`)
+- Retours du porteur après ses premiers tests : photo de profil facultative à la place des emojis (profils non listables), podium et fiche recadrés, popups centrées, bouton Instagram, carte du prono sur l'accueil avec l'écharpe en bandeau, bouton flottant de gestion, journal masqué s'il est vide
 - Sous Windows : JDK 21 requis pour l'émulateur, et vitest à lancer depuis un chemin `C:\` en majuscule (voir ARCHITECTURE.md)
-- Limites connues : voir "Reste à faire" dans `docs/ARCHITECTURE.md` (écrans à construire, retour après connexion pour les liens d'invitation, bundle de 900 kB, `Sash` jamais vu dans un navigateur)
 
-**Pour reprendre :**
-1. **Écrans J2 fusionnés dans `dev` le 21/11** : tous les écrans joueur et de gestion, avec les composants partagés (`ConfirmDialog`, `PartyJournal`, `ResultsEditor`, `InviteShare`, `EmojiPicker`, `Toast`, `Confetti`, `InstallBanner`). typecheck, lint et build passent, mais **aucun écran n'a encore été vu dans un navigateur** ni testé contre l'émulateur
-2. Prochaine étape : faire tourner l'app en local (émulateurs) et parcourir tous les écrans, puis agent QA, puis mise en ligne. Le porteur doit d'abord créer le projet Firebase `missfrancebet` (plan Spark) en suivant le README, et fournir la config web pour `.env.local`
+**Reste à faire, dans l'ordre :**
+1. Déployer les derniers retours (carte de l'accueil, Instagram, message de révélation, bouton flottant, journal), puis continuer les retours du porteur
+2. Agent **QA** (section 8) : revue indépendante, tentatives de triche contre les règles, parcours complet sur mobile (iPhone en PWA installée compris)
+3. Activer **App Check** (README) ; envisager le découpage du bundle (1 Mo) avec `React.lazy`
+4. Répétition générale avec 2–3 amis (J4, 29/11)
+5. Fusionner `dev` dans `main` et redéployer depuis `main` avant d'envoyer le vrai lien (J5, ≤ 05/12)
+6. Reconfirmer la date et l'heure de l'émission dans `src/data/editions/2027/edition.json` (21h10 provisoire)
 
 ## 10. Préparer l'édition suivante (2028 et après), même sans le porteur
 
