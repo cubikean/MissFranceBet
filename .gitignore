@@ -11,3 +11,7 @@ ui-debug.log
 *-debug.log
 .firebase
 coverage
+
+# Python (caches de la skill ui-ux-pro-max)
+__pycache__/
+*.pyc
