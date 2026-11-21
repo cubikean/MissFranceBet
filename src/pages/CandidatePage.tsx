@@ -82,7 +82,7 @@ export function CandidatePage() {
 
       <article className="fiche__sheet">
         <div className="fiche__photo">
-          <img src={candidate.photoFull} alt={`${candidate.name}, ${label}, en pied`} width="600" height="900" />
+          <img src={candidate.photoFull} alt={`${candidate.name}, ${label}, en pied`} width="700" height="1244" />
         </div>
 
         <div className="fiche__body">
@@ -105,17 +105,34 @@ export function CandidatePage() {
           )}
 
           {candidate.instagram && (
-            <p>
+            <div className="fiche__instagram">
               <a
-                className="link-button"
+                className="instagram-button"
                 href={`https://www.instagram.com/${encodeURIComponent(candidate.instagram)}/`}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                @{candidate.instagram} sur Instagram
-                <span className="visually-hidden"> (nouvel onglet)</span>
+                <svg
+                  className="instagram-button__icon"
+                  viewBox="0 0 24 24"
+                  width="22"
+                  height="22"
+                  aria-hidden="true"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="5" />
+                  <circle cx="12" cy="12" r="4" />
+                  <circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" stroke="none" />
+                </svg>
+                Voir sur Instagram
+                <span className="visually-hidden"> : @{candidate.instagram} (nouvel onglet)</span>
               </a>
-            </p>
+              <span className="muted fiche__instagram-handle">@{candidate.instagram}</span>
+            </div>
           )}
 
           <div className="fiche__choose">

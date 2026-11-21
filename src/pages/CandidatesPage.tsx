@@ -68,7 +68,7 @@ export function CandidatesPage() {
                   .join(' ')}
               >
                 <span className="candidate-card__photo">
-                  <img src={c.photo} alt="" loading="lazy" decoding="async" width="300" height="400" />
+                  <img src={c.photo} alt="" loading="lazy" decoding="async" width="600" height="1066" />
                   {isMine && <Sash region="Mon prono" variant="mine" size="sm" className="candidate-card__sash" />}
                 </span>
                 <span className="candidate-card__name">{c.name}</span>

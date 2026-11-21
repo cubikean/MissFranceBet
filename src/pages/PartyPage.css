@@ -126,7 +126,7 @@
 }
 
 .podium__step--gold {
-  padding-block: var(--space-5);
+  padding-block: var(--space-4);
   border: 3px solid var(--color-or);
 }
 
@@ -148,10 +148,15 @@
   font-weight: var(--weight-semibold);
 }
 
+/* Portraits 9:16, têtes en haut : vignette carrée cadrée sur le visage. height: auto annule
+   l'attribut height de la balise, qui sinon fixe la hauteur et ignore aspect-ratio. */
 .podium__photo {
   width: 100%;
-  aspect-ratio: 3 / 4;
+  max-width: 7rem;
+  height: auto;
+  aspect-ratio: 1;
   object-fit: cover;
+  object-position: top;
   border-radius: var(--radius-photo);
 }
 

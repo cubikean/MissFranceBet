@@ -1,5 +1,10 @@
+/* margin: auto centre le <dialog> modal (le reset `* { margin: 0 }` de base.css l'annule) ;
+   max-height + overflow : une longue fenêtre reste lisible et défilable sur petit écran. */
 .confirm {
   width: min(100% - 2 * var(--space-4), 28rem);
+  max-height: calc(100dvh - 2 * var(--space-4));
+  margin: auto;
+  overflow: auto;
   padding: 0;
   border: 0;
   border-radius: var(--radius-sheet);

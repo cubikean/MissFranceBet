@@ -300,7 +300,7 @@ function Podium({
               <span className="podium__title">{title}</span>
               {c ? (
                 <>
-                  <img className="podium__photo" src={c.photo} alt="" width="300" height="400" />
+                  <img className="podium__photo" src={c.photo} alt="" width="600" height="1066" />
                   <Sash region={c.region} variant={key === 'winner' ? 'winner' : 'default'} size="sm" />
                   <span className="podium__name">{c.name}</span>
                 </>

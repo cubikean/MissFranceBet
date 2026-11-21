@@ -33,7 +33,7 @@ Les polices sont auto-hébergées avec `@fontsource`, pour que l'app fonctionne 
 
 ## Mise en page (mobile d'abord, 360–430 px)
 - Alignement à gauche partout, sauf le podium final, qui est centré.
-- Grille des candidates : 2 colonnes de portraits 3:4, avec le nom en Fraunces sous la photo et la région en petit. Aucune ombre : un bord de 1 px Écharpe à 12 % d'opacité, rayon 14 px.
+- Grille des candidates : 2 colonnes de vignettes 3:4 (portraits 9:16 recadrés par le haut), avec le nom en Fraunces sous la photo et la région en petit. Aucune ombre : un bord de 1 px Écharpe à 12 % d'opacité, rayon 14 px.
 - La candidate choisie a un contour de 3 px Strass et une mini-écharpe "Mon prono" posée en diagonale sur le coin de la photo.
 - Fiche candidate : une feuille qui monte du bas, photo en pied, infos, puis un seul bouton "Choisir Miss <Région>".
 - Navigation : une barre en bas à 4 onglets (Accueil, Candidates, Soirée, Profil). Un 5e onglet "Admin" n'apparaît que pour l'admin.

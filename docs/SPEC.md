@@ -87,7 +87,7 @@ parties/{p}/results/live                       top15: id[], top5: id[], winner, 
 ## Données et assets
 - `src/data/editions/2027/edition.json` : titre et date de l'émission (écrit à la main, une fois par an).
 - `src/data/editions/2027/candidates.json` : les 31 candidates (généré par `scripts/prep_data.py`, ne pas modifier à la main).
-- `public/candidates/2027/<id>.webp` (portrait 3:4) et `<id>-full.webp` (photo en pied) : générés.
+- `public/candidates/2027/<id>.webp` (portrait 600 × 1066, soit 9:16) et `<id>-full.webp` (photo en pied, 700 × 1244) : générés. Toutes les têtes sont en haut de l'image : les vignettes recadrent avec `object-fit: cover; object-position: top`.
 - Rien n'est importé dans Firestore. L'édition la plus récente embarquée est l'**édition en cours**.
 
 ## Contraintes

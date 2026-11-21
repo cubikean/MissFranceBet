@@ -26,11 +26,12 @@
   background: var(--color-bg);
 }
 
+/* Photos en pied 9:16, toutes au même gabarit avec la tête en haut : on recadre par le haut. */
 .fiche__photo img {
   width: 100%;
-  height: auto;
-  max-height: 70dvh;
-  object-fit: contain;
+  height: min(52dvh, 28rem);
+  object-fit: cover;
+  object-position: top;
 }
 
 .fiche__body {
@@ -66,4 +67,46 @@
 .fiche__choose {
   display: grid;
   gap: var(--space-2);
+}
+
+/* Bouton Instagram : dégradé et glyphe de la marque (seule exception aux tokens de l'app). */
+.fiche__instagram {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.instagram-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-target);
+  padding: var(--space-2) var(--space-5);
+  border-radius: 12px;
+  background: linear-gradient(45deg, #f58529 0%, #dd2a7b 45%, #8134af 75%, #515bd4 100%);
+  color: #ffffff;
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  box-shadow: 0 2px 8px rgb(221 42 123 / 0.3);
+  transition: transform var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
+}
+
+.instagram-button:hover {
+  box-shadow: 0 4px 14px rgb(221 42 123 / 0.4);
+}
+
+.instagram-button:active {
+  transform: scale(0.98);
+}
+
+.instagram-button__icon {
+  flex: none;
+}
+
+.fiche__instagram-handle {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
