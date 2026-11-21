@@ -11,7 +11,7 @@ Documents liés :
 
 ## 1. L'idée en une phrase
 
-Une web app **privée** de **pronostics** pour l'élection Miss France, faite pour **une soirée entre une vingtaine d'amis** : chacun choisit la candidate qu'il voit gagner, l'app suit l'émission en direct et distribue des trophées à la fin. Les trophées sont conservés d'une année sur l'autre.
+Une web app **privée** de **pronostics** pour l'élection Miss France, entre amis : chaque groupe crée sa **party** pour l'édition de l'année et invite ses amis avec un code, chacun choisit la candidate qu'il voit gagner, l'app suit l'émission en direct et distribue des trophées à la fin. Les trophées sont conservés d'une année sur l'autre. L'app doit **fonctionner sans le porteur du projet** les années suivantes.
 
 - **Porteur du projet** : Cubikean (Hugo Chatigny), développeur web et designer UX/UI. Il valide toutes les décisions.
 - **Dépôt** : `github.com/cubikean/MissFranceBet`
@@ -31,17 +31,17 @@ Ne remets pas ces points en question sans l'accord du porteur du projet. Ajoute 
 | Date | Décision | Raison |
 |---|---|---|
 | 2026-11-21 | PWA (web app installable), pas d'app store | Accessible sur iOS et Android via un simple lien |
-| 2026-11-21 | Usage privé, ~20 amis, une soirée par an | Contexte réel du projet |
-| 2026-11-21 | **Un seul prono par joueur et par édition** : la gagnante | Simplicité ; choix du porteur (lecture "a") |
+| 2026-11-21 | Usage privé, ~20 amis, une soirée par an | Contexte réel du projet (élargi : plusieurs parties possibles, voir plus bas) |
+| 2026-11-21 | **Un seul prono par joueur et par édition** : la gagnante | Simplicité ; choix du porteur (lecture "a"). Devenu : un prono par joueur et **par party** |
 | 2026-11-21 | Trophées : 🥇 si ta candidate gagne, 🥈 si elle est 1re dauphine, 🥉 si elle est 2e dauphine | Choix du porteur |
 | 2026-11-21 | Le prono est **modifiable jusqu'à la fermeture** ; chaque changement est historisé (horodatage serveur, aucune modification ni suppression possible) | Anti-triche |
-| 2026-11-21 | **Bouton "Fermer les pronos"** manuel dans le back-office | La fermeture se fait au moment choisi par l'admin |
+| 2026-11-21 | **Bouton "Fermer les pronos"** manuel dans le back-office | La fermeture se fait au moment choisi par l'admin (de la party) |
 | 2026-11-21 | Les pronos des autres sont **cachés jusqu'à la fermeture**, puis révélés | Évite que tout le monde copie le favori |
 | 2026-11-21 | Statut **"en course / éliminée"** pendant l'émission (top 15, top 5, podium) | Faire vivre l'app pendant la soirée |
-| 2026-11-21 | Résultats **saisis à la main** par l'admin (pas de scraping ni d'API) | Aucune API officielle n'existe ; la télé en direct est plus rapide et plus fiable que n'importe quelle source web |
-| 2026-11-21 | Pas de co-admin pour l'instant | Choix du porteur |
+| 2026-11-21 | Résultats **saisis à la main** par l'admin de la party (pas de scraping ni d'API) | Aucune API officielle n'existe ; la télé en direct est plus rapide et plus fiable que n'importe quelle source web |
+| 2026-11-21 | Pas de co-admin pour l'instant | Choix du porteur (une party = un admin, son créateur) |
 | 2026-11-21 | **Comptes réels** : Google OAuth + email/mot de passe (avec "mot de passe oublié") | L'historique doit survivre à un navigateur vidé ou à un changement de téléphone |
-| 2026-11-21 | Onboarding : pseudo unique + emoji avatar ; **code de soirée** pour rejoindre une édition | Restreindre l'accès aux invités |
+| 2026-11-21 | Onboarding : pseudo unique + emoji avatar ; **code de soirée** pour rejoindre une édition | Restreindre l'accès aux invités. **Remplacé** : code d'invitation par party (voir plus bas) |
 | 2026-11-21 | **Historique sur toutes les éditions** (notion d'"édition" par année) | Choix du porteur |
 | 2026-11-21 | **Firebase, plan Spark (gratuit)** : Auth, Firestore, Hosting. **Pas de Cloud Functions ni de Storage** | Gratuit et sans mise en pause. Supabase est écarté parce que son plan gratuit met en pause les projets inactifs depuis 7 jours, ce qui ne convient pas à une app utilisée une fois par an. Storage exige le plan Blaze |
 | 2026-11-21 | Photos des candidates **embarquées en statique** dans `public/` | Pas de Storage sur Spark |
@@ -49,37 +49,47 @@ Ne remets pas ces points en question sans l'accord du porteur du projet. Ajoute 
 | 2026-11-21 | Stack front : Vite + React + TypeScript strict + react-router + vite-plugin-pwa, CSS natif avec tokens | Compétences du porteur, aucune dépendance UI lourde |
 | 2026-11-21 | Direction visuelle "l'écharpe" (voir DESIGN.md) | L'écharpe bleu marine des photos officielles devient la signature de l'app |
 | 2026-11-21 | Domaine : **missfrancebet.web.app**. L'ID du projet Firebase (et du site Hosting) est `missfrancebet` ; `authDomain` vaut `missfrancebet.web.app` | Gratuit et immédiat ; choix du porteur |
+| 2026-11-21 | Le code de soirée n'est **stocké nulle part côté membres** : preuve temporaire `joinProofs/{uid}` vérifiée par les règles puis supprimée | Le code ne sert qu'à rejoindre ; choix du porteur |
+| 2026-11-21 | **Parties** : chaque joueur peut créer une party pour l'édition en cours ; **son créateur en est l'admin** ; un **code unique** de 6 caractères est généré ; les autres rejoignent avec ce code. Un joueur peut être dans plusieurs parties (un prono par party) | L'app doit vivre sans le porteur les années suivantes ; choix du porteur |
+| 2026-11-21 | **Super admin** (`admins/{uid}`, le porteur) : voit et gère toutes les parties. Il n'est **pas nécessaire** au fonctionnement | Garder la main sans être indispensable |
+| 2026-11-21 | **Résultats saisis par l'admin de chaque party** (chaque party a ses propres résultats) | Autonomie totale ; tous regardent la même émission |
+| 2026-11-21 | **Éditions et candidates embarquées dans l'app** (`src/data/editions/<année>/edition.json` + `candidates.json`), plus dans Firestore ; plus d'import admin | Photos de qualité, 0 € ; la seule tâche annuelle est de générer les données et déployer |
+| 2026-11-21 | Le **code d'une party est visible de tous ses membres** (pour inviter), jamais listable par les autres | Comme un lien d'invitation de groupe ; choix du porteur |
+| 2026-11-21 | **Réouverture des pronos permise mais journalisée** : chaque changement de phase est écrit dans un journal immuable visible des membres | L'admin joue aussi : la transparence remplace l'interdiction ; choix du porteur |
+| 2026-11-21 | **Avant la fermeture, personne ne voit les pronos des autres**, ni l'admin de la party ni le super admin | L'admin de la party est aussi joueur |
 
 ## 4. Règles du jeu (résumé ; le détail est dans SPEC.md)
 
-1. Je me connecte (Google ou email), je choisis un pseudo et un emoji, puis j'entre le code de soirée.
-2. Je parcours les 31 candidates et j'en **choisis une**. Je peux changer d'avis autant que je veux tant que les pronos sont ouverts. Chaque changement est horodaté par le serveur.
-3. L'admin ferme les pronos. Plus aucun changement n'est possible et **tous les pronos sont révélés**, avec l'historique des changements d'avis.
-4. Pendant l'émission, l'admin saisit le top 15, puis le top 5, puis le podium. Chacun voit en direct si sa candidate est encore en course.
-5. À la fin, chacun reçoit 🥇, 🥈, 🥉 ou rien, selon la place de sa candidate. Les trophées restent sur le profil d'année en année.
+1. Je me connecte (Google ou email), je choisis un pseudo et un emoji.
+2. Je **crée une party** pour l'édition en cours (j'en deviens l'admin, l'app me donne un code) **ou j'en rejoins une** avec le code ou le lien `/rejoindre/<code>` qu'un ami m'a envoyé.
+3. Je parcours les candidates et j'en **choisis une** pour ma party. Je peux changer d'avis autant que je veux tant que les pronos sont ouverts. Chaque changement est horodaté par le serveur.
+4. L'admin de la party ferme les pronos. Plus aucun changement n'est possible et **tous les pronos de la party sont révélés**, avec l'historique des changements d'avis.
+5. Pendant l'émission, l'admin de la party saisit le top 15, puis le top 5, puis le podium. Chacun voit en direct si sa candidate est encore en course.
+6. À la fin, chacun reçoit 🥇, 🥈, 🥉 ou rien, selon la place de sa candidate. Les trophées restent sur le profil d'année en année.
 
-**Phases d'une édition** : `open` → `closed` → `finished`. Seul l'admin les change. Le retour en arrière lui est permis en cas d'erreur.
+**Phases d'une party** : `open` → `closed` → `finished`. Seuls l'admin de la party et le super admin les changent. Le retour en arrière est permis, et chaque changement de phase est journalisé, visible de tous les membres.
 
 ## 5. Écrans
 
-`/connexion`, `/bienvenue` (onboarding), `/rejoindre` (code), `/` (accueil), `/candidates`, `/candidates/:id`, `/soiree` (live et révélation), `/profil`, `/admin`.
-On navigue avec une barre d'onglets en bas : Accueil, Candidates, Soirée, Profil, plus Admin si l'utilisateur est admin. Un bandeau d'installation PWA explique la manipulation sur iOS (Safari → Partager → "Sur l'écran d'accueil"). Le détail de chaque écran est dans SPEC.md.
+`/connexion`, `/bienvenue` (onboarding), `/rejoindre/:code?` (code ou lien d'invitation), `/parties` (mes parties : choisir l'active, créer, rejoindre), `/` (accueil), `/candidates`, `/candidates/:id`, `/soiree` (live et révélation de la party active), `/soiree/gestion` (admin de la party), `/profil`, `/admin` (super admin : toutes les parties).
+On navigue avec une barre d'onglets en bas : Accueil, Candidates, Soirée, Profil, plus Admin si l'utilisateur est super admin. La gestion de la party est un bouton dans Soirée. Un bandeau d'installation PWA explique la manipulation sur iOS (Safari → Partager → "Sur l'écran d'accueil"). Le détail de chaque écran est dans SPEC.md.
 
 ## 6. Exigences non négociables
 
 - **Anti-triche garanti côté serveur** (règles Firestore), jamais seulement dans l'interface :
-  - un joueur ne peut écrire que son propre prono ;
-  - aucune écriture n'est possible après la fermeture ;
+  - un joueur ne peut écrire que son propre prono, et seulement dans une party dont il est membre ;
+  - aucune écriture de prono n'est possible après la fermeture ;
   - l'horodatage vaut `request.time` ;
   - le prono et son historique sont écrits ensemble, en batch, et restent cohérents (`getAfter` / `existsAfter`) ;
-  - l'historique est en création seule ;
-  - les pronos des autres sont illisibles avant la fermeture ;
-  - le code de soirée n'est jamais lisible par le client ;
-  - devenir admin est impossible depuis le client.
+  - l'historique et le journal des phases sont en création seule ;
+  - les pronos des autres sont illisibles avant la fermeture, **par tout le monde** (admin de la party et super admin compris) ;
+  - on ne rejoint une party qu'en prouvant qu'on connaît son code ; le code n'est lisible que par les membres, et les codes ne sont pas listables ;
+  - seuls l'admin de la party (son créateur) et le super admin changent la phase, saisissent les résultats et retirent des membres ; tout changement de phase est journalisé ;
+  - devenir super admin, ou prendre la place du créateur d'une party, est impossible depuis le client.
 - **Chaque règle a un test** dans `tests/rules/`. Toute modification de `firestore.rules` doit être accompagnée de tests qui passent.
 - **0 €** : n'ajoute aucune dépendance à un service payant, ni rien qui exige le plan Blaze.
 - **Mobile d'abord** (360–430 px), cibles tactiles de 44 px, focus visible, `prefers-reduced-motion` respecté.
-- **Français partout**, tutoiement. Les données des candidates (`src/data/editions/*/candidates.json`) et les photos (`public/candidates/*`) sont générées : on ne les modifie pas à la main.
+- **Français partout**, tutoiement. Les données des candidates (`src/data/editions/*/candidates.json`) et les photos (`public/candidates/*`) sont générées : on ne les modifie pas à la main. `edition.json` (titre et date) est écrit à la main.
 - Connexion Google : `signInWithRedirect` sur mobile et en mode standalone, `signInWithPopup` sur desktop ; `authDomain` = domaine Firebase Hosting.
 
 ## 7. Règles Git (impératives)
@@ -96,9 +106,9 @@ On navigue avec une barre d'onglets en bas : Accueil, Candidates, Soirée, Profi
 | Rôle | Responsabilité | Statut |
 |---|---|---|
 | Chef de projet | Cadrage, arbitrages avec le porteur, découpage, intégration, revue, commits et push | Actif |
-| Fondations | Scaffold, Firebase, couche données `src/lib`, règles Firestore et tests, README, ARCHITECTURE.md | En cours |
-| Front joueur | Connexion, onboarding, accueil, candidates, fiche, soirée, profil, bandeau d'installation | À lancer après Fondations |
-| Back-office | `/admin` : éditions, code, import des candidates, phases, saisie des résultats, vue des pronos | À lancer après Fondations, en parallèle du front |
+| Fondations | Scaffold, Firebase, couche données `src/lib`, règles Firestore et tests, README, ARCHITECTURE.md | Terminé (modèle par party) |
+| Front joueur | Connexion, onboarding, parties (créer, rejoindre, choisir), accueil, candidates, fiche, soirée, profil, bandeau d'installation | À lancer après Fondations |
+| Gestion | `/soiree/gestion` (admin de party : phases, résultats, membres, code) et `/admin` (super admin : toutes les parties) | À lancer après Fondations, en parallèle du front |
 | QA | Revue indépendante, tentatives de triche, test mobile, vérification du parcours complet | À la fin |
 
 Règles de collaboration :
@@ -114,40 +124,43 @@ Règles de collaboration :
 | J1 | Fondations : scaffold, Firebase, règles et tests | 22/11 |
 | J2 | Écrans joueur + back-office | 24/11 |
 | J3 | QA, corrections, mise en ligne sur Firebase (projet créé par le porteur) | 27/11 |
-| J4 | Répétition générale : le porteur et 2–3 amis jouent une édition de test complète (inscription → prono → fermeture → résultats) | 29/11 |
-| J5 | Création de l'édition 2027 réelle et envoi du lien et du code aux amis | ≤ 05/12 |
-| J6 | Soirée : le porteur pilote le back-office pendant l'émission | 12/12 |
-| Plus tard | Idées hors périmètre V1 (à ne pas faire sans accord) : co-admin, plusieurs groupes d'amis, pronos sur le top 5, mode TV plein écran, notifications push | — |
+| J4 | Répétition générale : le porteur et 2–3 amis jouent une party de test complète (inscription → création de party → invitation → prono → fermeture → résultats) | 29/11 |
+| J5 | Création de la party 2027 réelle et envoi du lien d'invitation aux amis | ≤ 05/12 |
+| J6 | Soirée : l'admin de la party (le porteur) saisit les résultats pendant l'émission | 12/12 |
+| Plus tard | Idées hors périmètre V1 (à ne pas faire sans accord) : co-admin, pronos sur le top 5, mode TV plein écran, notifications push | — |
 
-## 9 bis. État du projet et reprise (mis à jour le 21/11/2026, 15h45)
+## 9 bis. État du projet et reprise (mis à jour le 21/11/2026)
 
 **Fait et poussé sur `dev` :**
-- Cadrage complet : ce fichier, `docs/SPEC.md`, `docs/DESIGN.md`
-- Données 2027 : `src/data/editions/2027/candidates.json` (31 candidates) et `public/candidates/2027/*.webp` (portrait `<id>.webp` et photo en pied `<id>-full.webp`)
+- Cadrage : ce fichier, `docs/SPEC.md`, `docs/DESIGN.md`
+- Données 2027 : `src/data/editions/2027/candidates.json` (31 candidates) et `public/candidates/2027/*.webp`
 - `scripts/prep_data.py`, qui régénère ces données à partir des photos
 
-**Jalon J1 Fondations terminé sur la branche `wip/fondations` :**
-- Scaffold Vite/React/TS/PWA, `src/lib` complet (le contrat ; son API est détaillée dans `docs/ARCHITECTURE.md`), `firestore.rules`, `firebase.json`, `.firebaserc` (missfrancebet), le composant `Sash`, des pages placeholder, le README avec la mise en ligne pas à pas
-- `build`, `typecheck` et `lint` passent ; 7/7 tests unitaires passent
-- ⚠️ **Les 31 tests des règles Firestore sont écrits mais n'ont JAMAIS été exécutés, et les règles n'ont jamais été compilées.** Le téléchargement de l'émulateur était bloqué dans l'environnement cloud. C'est la **première chose à faire**, sur une machine qui a accès au réseau
-- Ajouts au modèle : `members.hasPicked`, pour compter les joueurs qui ont pronostiqué sans révéler leur choix ; le token `--color-text-muted: #4f5874`, pour le contraste
-- Limites connues et reste à faire : voir la section "Reste à faire" de `docs/ARCHITECTURE.md`. Les points principaux : pas de guard d'appartenance sur les routes (chaque écran doit vérifier `useMembership`), bundle de 895 kB à découper avec `React.lazy`, `Sash` jamais vu dans un navigateur
+**Jalon J1 Fondations terminé sur la branche `wip/fondations` (pas encore fusionnée dans `dev`) :**
+- Scaffold Vite/React/TS/PWA, `firebase.json`, `.firebaserc` (missfrancebet), le composant `Sash`, des pages placeholder pour toutes les routes, le README avec la mise en ligne pas à pas
+- **Modèle par party** (décisions du 21/11) : `src/lib` (le contrat, API dans `docs/ARCHITECTURE.md`), `firestore.rules`, `firestore.indexes.json`, `src/data/editions/2027/edition.json`
+- `typecheck`, `lint` et `build` passent ; 7/7 tests unitaires ; **59/59 tests des règles sur l'émulateur**, contrôlés par mutation (casser une règle fait échouer un test)
+- Sous Windows : JDK 21 requis pour l'émulateur, et vitest à lancer depuis un chemin `C:\` en majuscule (voir ARCHITECTURE.md)
+- Limites connues : voir "Reste à faire" dans `docs/ARCHITECTURE.md` (écrans à construire, retour après connexion pour les liens d'invitation, bundle de 900 kB, `Sash` jamais vu dans un navigateur)
 
-**Pour reprendre (prochaine session) :**
-1. `git checkout wip/fondations && npm ci`
-2. Vérifier `npm run typecheck && npm run lint && npm run build`, puis `npm run test:rules` (émulateur Firestore, Java requis)
-3. Relire `firestore.rules` point par point face à la section 6 ci-dessus, et compléter les tests manquants dans `tests/rules/`
-4. Fusionner dans `dev`, puis lancer **en parallèle** l'agent Front joueur et l'agent Back-office (section 8), avec `src/lib` comme contrat
-5. Agent QA, puis mise en ligne. Le porteur doit d'abord créer le projet Firebase `missfrancebet` (plan Spark), en suivant le README
+**Pour reprendre :**
+1. Fusionner `wip/fondations` dans `dev` (accord du porteur nécessaire)
+2. Lancer **en parallèle** l'agent Front joueur et l'agent Gestion (section 8), avec `src/lib` comme contrat
+3. Agent QA, puis mise en ligne. Le porteur doit d'abord créer le projet Firebase `missfrancebet` (plan Spark) en suivant le README, et fournir la config web pour `.env.local`
 
-## 10. Préparer l'édition suivante (2028 et après)
+## 10. Préparer l'édition suivante (2028 et après), même sans le porteur
 
+C'est la **seule tâche annuelle**, à faire par quelqu'un qui sait lancer un script et déployer (le README guide pas à pas) :
 1. Récupérer la liste des candidates (une Sheet à jour) et leurs photos (zip).
-2. Générer `src/data/editions/<année>/candidates.json` et `public/candidates/<année>/*.webp` avec le script de préparation (`scripts/prep_data.py`, à adapter : liste des candidates, année, nommage des photos).
-3. Dans `/admin` : créer l'édition (titre, date, code de soirée), importer les candidates, laisser les pronos ouverts.
-4. Les éditions passées restent intactes : les trophées s'accumulent sur les profils.
+2. Générer `src/data/editions/<année>/candidates.json` et `public/candidates/<année>/*.webp` avec `scripts/prep_data.py` (à adapter : liste des candidates, année, nommage des photos).
+3. Écrire `src/data/editions/<année>/edition.json` (`editionId`, `title`, `showAt` avec fuseau).
+4. `npm run build && npx firebase deploy`. La nouvelle édition devient l'édition en cours : chacun peut créer sa party.
+5. Les parties passées restent intactes : les trophées s'accumulent sur les profils.
+
+Il faut aussi que quelqu'un d'autre que le porteur ait accès au projet Firebase (rôle Propriétaire ou Éditeur dans la console) et au dépôt GitHub, sinon personne ne pourra déployer.
 
 ## 11. Questions ouvertes
 
 - Si l'ID `missfrancebet` est déjà pris chez Firebase, on garde un ID de projet différent et on crée un site Hosting supplémentaire nommé `missfrancebet` (ce qui est possible sur Spark).
 - L'identité visuelle finale reste à valider par le porteur sur les premiers écrans.
+- Qui, parmi les amis, aura accès au projet Firebase et au dépôt pour déployer l'édition 2028 si le porteur n'est pas là ?

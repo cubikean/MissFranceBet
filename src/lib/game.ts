@@ -1,5 +1,5 @@
 // Fonctions pures de la logique de jeu (testées dans game.test.ts, sans Firebase).
-import type { CandidateStatus, Edition, Pick, Results, Trophy } from './types'
+import type { CandidateStatus, Party, Pick, Results, Trophy } from './types'
 
 export const EMPTY_RESULTS: Results = {
   top15: null,
@@ -21,10 +21,10 @@ export function hasPodium(results: Results | null): boolean {
  */
 export function candidateStatus(
   candidateId: string,
-  edition: { status: Edition['status'] } | null,
+  party: { status: Party['status'] } | null,
   results: Results | null,
 ): CandidateStatus {
-  if (!edition || edition.status === 'open') return 'neutral'
+  if (!party || party.status === 'open') return 'neutral'
   const r = results ?? EMPTY_RESULTS
   if (hasPodium(r)) {
     if (r.winner === candidateId) return 'winner'

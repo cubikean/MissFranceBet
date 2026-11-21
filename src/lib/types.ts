@@ -1,18 +1,22 @@
 // Types partagés de l'app. Les dates Firestore (Timestamp) sont converties en Date.
 // Attention : `Pick` masque l'utilitaire TypeScript Pick<T, K> là où il est importé.
 
-export type EditionStatus = 'open' | 'closed' | 'finished'
-
-/** editions/{id} */
+/** Édition = une année de Miss France. Embarquée dans l'app : src/data/editions/<id>/edition.json */
 export interface Edition {
   id: string
   title: string
   showAt: Date
-  status: EditionStatus
-  createdAt: Date | null
 }
 
-/** editions/{e}/candidates/{id} — champs de src/data/editions/<e>/candidates.json */
+/** Format de src/data/editions/<id>/edition.json */
+export interface EditionFile {
+  editionId: string
+  title: string
+  /** ISO 8601 avec fuseau, ex. "2026-12-12T21:10:00+01:00" */
+  showAt: string
+}
+
+/** Candidate embarquée : src/data/editions/<e>/candidates.json */
 export interface Candidate {
   id: string
   order: number
@@ -34,14 +38,42 @@ export interface CandidatesFile {
   candidates: Candidate[]
 }
 
-/** editions/{e}/members/{uid} (aucun code stocké : voir joinProofs dans firestore.rules) */
+export type PartyStatus = 'open' | 'closed' | 'finished'
+
+/** parties/{id} : un groupe d'amis pour une édition. Son créateur (ownerUid) en est l'admin. */
+export interface Party {
+  id: string
+  editionId: string
+  name: string
+  ownerUid: string
+  /** Code d'invitation (6 caractères), lisible par les membres. */
+  code: string
+  status: PartyStatus
+  /** Nombre de changements de phase (= nombre d'entrées dans events). */
+  statusChanges: number
+  createdAt: Date | null
+}
+
+/** parties/{p}/members/{uid} */
 export interface Membership {
   uid: string
+  partyId: string
+  editionId: string
   joinedAt: Date | null
   hasPicked: boolean
 }
 
-/** editions/{e}/picks/{uid} */
+/** parties/{p}/events/{n} : journal des changements de phase, immuable, visible des membres. */
+export interface PartyEvent {
+  n: number
+  from: PartyStatus
+  to: PartyStatus
+  /** uid de l'admin (ou du super admin) qui a changé la phase */
+  by: string
+  at: Date | null
+}
+
+/** parties/{p}/picks/{uid} */
 export interface Pick {
   uid: string
   candidateId: string
@@ -50,7 +82,7 @@ export interface Pick {
   updatedAt: Date | null
 }
 
-/** editions/{e}/pickHistory/{uid}_{changeCount} */
+/** parties/{p}/pickHistory/{uid}_{changeCount} */
 export interface PickHistoryEntry {
   id: string
   uid: string
@@ -59,7 +91,7 @@ export interface PickHistoryEntry {
   at: Date | null
 }
 
-/** editions/{e}/results/live — null = pas encore saisi */
+/** parties/{p}/results/live — null = pas encore saisi */
 export interface Results {
   top15: string[] | null
   top5: string[] | null

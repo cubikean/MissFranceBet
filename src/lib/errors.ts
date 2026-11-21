@@ -3,7 +3,7 @@ import { FirebaseError } from 'firebase/app'
 /** Erreur métier avec un message prêt à afficher. */
 export class AppError extends Error {
   constructor(
-    public readonly code: 'username-taken' | 'username-invalid' | 'wrong-code' | 'not-signed-in' | 'picks-closed',
+    public readonly code: 'username-taken' | 'username-invalid' | 'wrong-code' | 'not-signed-in' | 'picks-closed' | 'party-invalid' | 'unknown-candidate',
     message: string,
   ) {
     super(message)
@@ -26,7 +26,7 @@ const MESSAGES: Record<string, string> = {
   'auth/cancelled-popup-request': 'Connexion annulée.',
   'auth/unauthorized-domain':
     "Ce domaine n'est pas autorisé dans Firebase Auth. Ajoute-le dans la console (Authentication > Paramètres).",
-  'permission-denied': "Action refusée. Vérifie que la soirée est ouverte et que tu l'as rejointe.",
+  'permission-denied': "Action refusée. Vérifie que les pronos sont ouverts et que tu as rejoint la party.",
   unavailable: 'Pas de connexion. Réessaie quand tu as du réseau.',
 }
 

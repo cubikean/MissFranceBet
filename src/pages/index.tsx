@@ -12,8 +12,15 @@ export function WelcomePage() {
   return <Placeholder title="Bienvenue" route="/bienvenue" />
 }
 
+/** Rejoindre une party avec son code ; /rejoindre/:code = lien d'invitation (code pré-rempli). */
 export function JoinPage() {
-  return <Placeholder title="Rejoindre la soirée" route="/rejoindre" />
+  const { code } = useParams()
+  return <Placeholder title="Rejoindre une party" route={`/rejoindre/${code ?? ''}`} />
+}
+
+/** Mes parties : choisir la party active, en créer une, en rejoindre une. */
+export function PartiesPage() {
+  return <Placeholder title="Mes parties" route="/parties" />
 }
 
 export function HomePage() {
@@ -47,8 +54,14 @@ export function ProfilePage() {
   return <Placeholder title="Profil" route="/profil" />
 }
 
+/** Gestion de la party active : réservée à son créateur ou au super admin (canManageParty). */
+export function PartyAdminPage() {
+  return <Placeholder title="Gérer la party" route="/soiree/gestion" />
+}
+
+/** Super admin : toutes les parties. */
 export function AdminPage() {
-  return <Placeholder title="Admin" route="/admin" />
+  return <Placeholder title="Super admin" route="/admin" />
 }
 
 export function NotFoundPage() {

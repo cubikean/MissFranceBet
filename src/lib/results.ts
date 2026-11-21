@@ -17,14 +17,14 @@ export function toResults(d: DocumentData | undefined): Results {
   }
 }
 
-/** Résultats en direct de l'édition (EMPTY_RESULTS tant que rien n'est saisi). */
-export function useResults(editionId: string | null): Live<Results> {
+/** Résultats en direct de la party, saisis par son admin (EMPTY_RESULTS tant que rien n'est saisi). */
+export function useResults(partyId: string | null): Live<Results> {
   const { user } = useAuth()
   return useSnapshot<Results>(
-    user && editionId ? `editions/${editionId}/results/live` : null,
+    user && partyId ? `parties/${partyId}/results/live` : null,
     (next, fail) =>
       onSnapshot(
-        doc(db, 'editions', editionId!, 'results', 'live'),
+        doc(db, 'parties', partyId!, 'results', 'live'),
         (s) => next(toResults(s.data({ serverTimestamps: 'estimate' }))),
         fail,
       ),

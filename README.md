@@ -1,6 +1,6 @@
 # Pronos Miss
 
-Web app privée (PWA) de pronostics Miss France entre amis : chacun choisit la candidate qu'il voit gagner, peut changer d'avis jusqu'à la fermeture, puis tout le monde découvre les pronos des autres et suit l'émission en direct. Les trophées 🥇🥈🥉 restent sur le profil d'une édition à l'autre.
+Web app privée (PWA) de pronostics Miss France entre amis. Chaque groupe crée sa party et invite ses amis avec un code ; chacun choisit la candidate qu'il voit gagner, peut changer d'avis jusqu'à la fermeture, puis tout le monde découvre les pronos des autres et suit l'émission en direct. Les trophées 🥇🥈🥉 restent sur le profil d'une édition à l'autre.
 
 Stack : Vite, React, TypeScript, react-router, Firebase (Auth, Firestore, Hosting) sur le plan gratuit Spark. Aucune Cloud Function. Spécification : `docs/SPEC.md`. Design : `docs/DESIGN.md`. Architecture : `docs/ARCHITECTURE.md`.
 
@@ -41,7 +41,7 @@ npm run emulators
 VITE_USE_EMULATORS=true VITE_FIREBASE_PROJECT_ID=demo-pronos-miss npm run dev
 ```
 
-Pour te rendre admin en local : dans l'interface des émulateurs (onglet Firestore), crée le document `admins/<ton uid>` (l'uid est visible dans l'onglet Authentication).
+Pour te rendre super admin en local : dans l'interface des émulateurs (onglet Firestore), crée le document `admins/<ton uid>` (l'uid est visible dans l'onglet Authentication). Ce n'est pas nécessaire pour jouer : n'importe quel compte peut créer une party et en être l'admin.
 
 ## Scripts
 
@@ -84,7 +84,7 @@ Tout est gratuit sur le plan Spark. Compte Google nécessaire.
    npx firebase deploy
    ```
    Cela envoie les règles Firestore, les index et le site. L'app est en ligne sur https://missfrancebet.web.app.
-8. **Te rendre admin.** Ouvre l'app, connecte-toi et choisis ton pseudo. Dans la console : Authentication > Utilisateurs, copie ton **UID**. Puis Firestore > « Commencer une collection » : ID de collection `admins`, ID du document = ton UID, aucun champ (ou un champ quelconque). Recharge l'app : l'onglet Admin apparaît.
-9. **Préparer la soirée.** Dans l'onglet Admin : crée l'édition (id `2027`, date de l'émission, code de soirée), importe les candidates, puis partage l'adresse et le code à tes amis.
+8. **Te rendre super admin.** Ouvre l'app, connecte-toi et choisis ton pseudo. Dans la console : Authentication > Utilisateurs, copie ton **UID**. Puis Firestore > « Commencer une collection » : ID de collection `admins`, ID du document = ton UID, aucun champ (ou un champ quelconque). Recharge l'app : l'onglet Admin apparaît, avec toutes les parties.
+9. **Préparer la soirée.** Dans l'onglet Parties : crée ta party, puis partage l'adresse et le lien d'invitation (`/rejoindre/<code>`) à tes amis. Rien d'autre à configurer : l'édition et les candidates sont embarquées dans l'app.
 
 Pour les mises à jour suivantes : `npm run build && npx firebase deploy`.

@@ -6,7 +6,7 @@ Notes techniques pour les agents/devs. Référence produit : `docs/SPEC.md`, des
 
 ```
 firestore.rules            règles de sécurité (le cœur anti-triche)
-firestore.indexes.json     index composite pickHistory (uid, changeCount)
+firestore.indexes.json     index pickHistory (uid, changeCount) + index collection group members.uid
 firebase.json / .firebaserc hosting (dist, SPA, cache), émulateurs, projet missfrancebet
 index.html                 lang="fr", noindex
 public/                    robots.txt, favicon.svg, icons/ (SVG + PNG générés), candidates/ (photos, ne pas toucher)
@@ -17,23 +17,24 @@ src/
   styles/tokens.css        tous les tokens DESIGN.md en custom properties
   styles/base.css          reset, focus visible, reduced-motion, .button, .page, .visually-hidden
   components/Sash.tsx      l'écharpe (élément signature)
-  components/AppShell.tsx  barre d'onglets du bas (+ Admin si admin)
-  components/guards.tsx    RequireAuth, RequireProfile, RequireAdmin
+  components/AppShell.tsx  barre d'onglets du bas (+ Admin si super admin)
+  components/guards.tsx    RequireAuth, RequireProfile, RequireSuperAdmin
   pages/index.tsx          pages provisoires (une par route) à remplacer
   lib/                     couche données (contrat), import depuis '../lib'
-  data/editions/2027/candidates.json  (ne pas toucher)
+  data/editions/2027/edition.json     titre + date de l'émission
+  data/editions/2027/candidates.json  (généré, ne pas toucher)
 tests/rules/firestore.test.ts  tests des règles (émulateur)
 ```
 
 ## Routes
 
-`/connexion` (public), `/bienvenue` (connecté), `/rejoindre` (connecté + pseudo), puis sous `AppShell` (connecté + pseudo) : `/`, `/candidates`, `/candidates/:id`, `/soiree`, `/profil`, `/admin` (RequireAdmin). L'appartenance à l'édition n'est pas imposée par un guard : chaque écran teste `useMembership` et renvoie vers `/rejoindre`.
+`/connexion` (public), `/bienvenue` (connecté), `/rejoindre/:code?` (connecté + pseudo), puis sous `AppShell` (connecté + pseudo) : `/`, `/candidates`, `/candidates/:id`, `/parties`, `/soiree`, `/soiree/gestion`, `/profil`, `/admin` (RequireSuperAdmin). L'appartenance à une party n'est pas imposée par un guard : les écrans résolvent la party active (`useActivePartyId` croisé avec `useMyParties(currentEdition()?.id)`) et proposent `/parties` s'il n'y en a pas. `/soiree/gestion` vérifie `canManageParty`.
 
 ## API de `src/lib` (importer depuis `src/lib/index.ts`)
 
-Tous les hooks sont temps réel (onSnapshot) et renvoient `Live<T> = { data: T; loading: boolean; error: Error | null }`. Un argument `null` = pas d'abonnement (données vides, loading false). Les dates sont des `Date` (serverTimestamp en attente : estimation locale).
+Tous les hooks Firestore sont temps réel (onSnapshot) et renvoient `Live<T> = { data: T; loading: boolean; error: Error | null }`. Un argument `null` = pas d'abonnement (données vides). Les dates sont des `Date` (serverTimestamp en attente : estimation locale). Éditions et candidates sont **embarquées** : fonctions synchrones, pas de hook.
 
-Types : `EditionStatus`, `Edition`, `Candidate`, `CandidatesFile`, `Membership`, `Pick` (masque l'utilitaire TS `Pick<>`), `PickHistoryEntry`, `Results`, `UserProfile`, `CandidateStatus`, `Trophy`, `Live<T>`.
+Types : `Edition`, `EditionFile`, `Candidate`, `CandidatesFile`, `PartyStatus`, `Party`, `Membership`, `PartyEvent`, `Pick` (masque l'utilitaire TS `Pick<>`), `PickHistoryEntry`, `Results`, `UserProfile`, `CandidateStatus`, `Trophy`, `Live<T>`.
 
 Auth (`auth.ts`)
 - `useAuth(): { user: User | null; loading: boolean; error: Error | null }`
@@ -48,42 +49,56 @@ Profil (`profile.ts`)
 - `useUsers(): Live<Record<uid, UserProfile>>`
 - `usernameError(name): string | null`, `normalizeUsername(name)`, `USERNAME_MIN/MAX`
 
-Éditions (`editions.ts`)
-- `useCurrentEdition(): Live<Edition | null>` (dernière par showAt), `useEditions(): Live<Edition[]>`, `useEdition(id): Live<Edition | null>`
-- `joinEdition(editionId, code): Promise<void>` — `AppError('wrong-code')` ; sans effet si déjà membre ; écrit preuve + adhésion en batch, puis supprime la preuve
-- `useMembership(editionId): Live<Membership | null>` (moi), `useMembers(editionId): Live<Membership[]>` (pour compter qui a pronostiqué)
-- `normalizeCode(code)` (sans espaces, majuscules)
+Éditions et candidates embarquées (`editions.ts`, `candidates.ts`)
+- `listEditions(): Edition[]` (plus récente d'abord), `currentEdition(): Edition | null`, `getEdition(id): Edition | null`
+- `listCandidates(editionId): Candidate[]` (triées par order), `getCandidate(editionId, id): Candidate | null`, `missLabel(c)` → "Miss Bretagne"
 
-Candidates (`candidates.ts`)
-- `useCandidates(editionId): Live<Candidate[]>` (triées par order)
-- `bundledCandidateFiles(): Record<editionId, CandidatesFile>` (JSON embarqués, pour l'import admin), `missLabel(c)` → "Miss Bretagne"
+Parties (`parties.ts`)
+- `createParty(editionId, name): Promise<{ partyId; code }>` — batch party + partyCodes + mon adhésion ; réessaie si collision de code ; `AppError('party-invalid')`
+- `joinParty(code): Promise<partyId>` — `AppError('wrong-code')` ; sans effet si déjà membre ; preuve + adhésion en batch, puis suppression de la preuve
+- `useParty(partyId): Live<Party | null>` (membres et super admin)
+- `useMyParties(editionId?): Live<Party[]>`, `useMyMemberships(): Live<Membership[]>` (collection group `members` où `uid == moi`)
+- `useMembership(partyId): Live<Membership | null>` (moi), `useMembers(partyId): Live<Membership[]>`
+- `usePartyEvents(partyId): Live<PartyEvent[]>` (journal des phases)
+- `useAllParties(enabled): Live<Party[]>` (super admin : passer `useIsSuperAdmin().data`)
+- `useActivePartyId(): string | null`, `setActivePartyId(id | null)` (localStorage, par appareil)
+- `canManageParty(party, uid, isSuperAdmin): boolean`
+- `normalizeCode`, `isValidCode`, `generateCode`, `CODE_ALPHABET`, `CODE_LENGTH`, `PARTY_NAME_MIN/MAX`, `PARTY_STATUSES`
 
 Pronos (`picks.ts`)
-- `setPick(editionId, candidateId): Promise<{ changeCount }>` — batch pick + pickHistory + members.hasPicked ; `AppError('picks-closed')`
-- `useMyPick(editionId): Live<Pick | null>`
-- `usePicks(editionId): Live<Pick[]>` — passer `null` tant que status == 'open' (sauf admin)
-- `usePickHistory(editionId, scope: 'mine' | 'all'): Live<PickHistoryEntry[]>` — 'all' : après fermeture ou admin
+- `setPick(party: Party, candidateId): Promise<{ changeCount }>` — vérifie la candidate (données embarquées), batch pick + pickHistory + members.hasPicked ; `AppError('unknown-candidate' | 'picks-closed')`
+- `useMyPick(partyId): Live<Pick | null>`
+- `usePicks(partyId): Live<Pick[]>` — passer `null` tant que status == 'open' (illisible par tous avant)
+- `usePickHistory(partyId, scope: 'mine' | 'all'): Live<PickHistoryEntry[]>` — 'all' : après fermeture seulement
 
 Résultats et logique de jeu (`results.ts`, `game.ts`, `trophies.ts`)
-- `useResults(editionId): Live<Results>` (`EMPTY_RESULTS` si rien)
-- `candidateStatus(candidateId, edition, results): CandidateStatus` — 'neutral' | 'inRace' | 'eliminated' | 'winner' | 'firstRunnerUp' | 'secondRunnerUp'
+- `useResults(partyId): Live<Results>` (`EMPTY_RESULTS` si rien)
+- `candidateStatus(candidateId, party, results): CandidateStatus` — 'neutral' | 'inRace' | 'eliminated' | 'winner' | 'firstRunnerUp' | 'secondRunnerUp'
 - `trophyFor(pick, results): 'gold' | 'silver' | 'bronze' | null`
-- `useMyTrophies(): Live<{ edition; candidateId; trophy }[]>` (éditions finished)
+- `useMyTrophies(): Live<{ party; edition; candidateId; trophy }[]>` (parties finished)
 
-Admin (`admin.ts`)
-- `useIsAdmin(): Live<boolean>`
-- `createEdition({ id, title, showAt: Date, code })`, `updateEdition(id, { title?, showAt? })`, `setEditionCode(id, code)`, `importCandidates(id, file): Promise<number>`, `setStatus(id, status)`, `setResults(id, patch)` (fusion, `null` efface)
+Administration (`admin.ts`) — admin de la party ou super admin
+- `useIsSuperAdmin(): Live<boolean>`
+- `setPartyStatus(party: Party, status)` — batch party + events/{n}
+- `renameParty(partyId, name)`, `removeMember(partyId, uid)`, `setResults(partyId, patch)` (fusion, `null` efface)
 
 Erreurs (`errors.ts`) : `errorMessage(err): string` (français, prêt à afficher), `AppError`, `isPermissionDenied`.
 
 ## Garanties des règles (firestore.rules)
 
-- Code de soirée : `members/{uid}` ne se crée que si la preuve `joinProofs/{uid}`, écrite dans le même batch, porte `code == get(editionSecrets/{e}).code`. La preuve est illisible par tous (auteur et admin compris) et supprimée par `joinEdition` juste après ; l'adhésion ne stocke aucun code. `editionSecrets` : `editionSecrets` : lecture refusée à tous (admin compris), écriture admin.
-- Pronos : écrits par leur propriétaire seulement, membre, `status == 'open'`, clés exactes, candidate existante, `updatedAt == request.time`, `changeCount` = 1 à la création puis ancien + 1 ; `getAfter(pickHistory/{uid}_{n})` doit avoir mêmes uid/candidate/compteur et `at == request.time`. Suppression interdite (même pour l'admin).
-- Historique : création seule, id `{uid}_{changeCount}`, `getAfter(picks/{uid})` cohérent avec `updatedAt == request.time` (donc écrit dans le même batch). Ni update ni delete.
-- Lecture : son prono/historique toujours ; ceux des autres seulement si membre et status != 'open' ; admin tout.
-- members : lisibles par les membres (aucun code n'y est stocké) ; seule mise à jour : `hasPicked → true` dans un batch de prono.
-- results/candidates/editions (dont status)/editionSecrets : écriture admin. `admins` : jamais écrit par le client, lecture de son propre doc.
+Chaque point est couvert par `tests/rules/firestore.test.ts` (59 tests, vérifiés aussi par mutation : casser une règle fait échouer un test).
+
+- Création de party : le créateur est `ownerUid`, statut `open`, `statusChanges == 0`, `createdAt == request.time`, code au bon format, `partyCodes/{code}` réservé dans le même batch (create échoue si le code existe), adhésion du créateur dans le même batch. Impossible d'ajouter un second code à une party existante.
+- `partyCodes` : get pour tout connecté, list interdit, ni update ni delete (sauf super admin).
+- Rejoindre : `members/{uid}` ne se crée que par soi-même, avec `editionId` égal à celui de la party, `hasPicked == false`, et soit en créant la party, soit avec `joinProofs/{uid}` (même batch) dont le code égale celui de la party. La preuve est illisible par tous.
+- Lecture d'une party et de ses membres : membres et super admin. Liste de toutes les parties : super admin. Collection group `members` : seulement ses propres adhésions (`uid == moi`).
+- Phases : admin de la party ou super admin ; tout changement de statut incrémente `statusChanges` et exige `events/{n}` dans le même batch (from = ancien statut, to = nouveau, by = moi, at = request.time). Journal immuable, lisible des membres. `ownerUid`, `code`, `editionId`, `createdAt` immuables. Suppression d'une party : super admin.
+- Pronos : écrits par leur propriétaire seulement, membre, party `open`, clés exactes, `candidateId` au format `[a-z0-9-]`, `updatedAt == request.time`, `changeCount` = 1 à la création puis ancien + 1 ; `getAfter(pickHistory/{uid}_{n})` cohérent. Suppression interdite à tous.
+- Historique : création seule, id `{uid}_{changeCount}`, cohérent avec le prono du même batch. Ni update ni delete.
+- Lecture des pronos : son prono et son historique toujours ; ceux des autres seulement après la fermeture, par les membres et le super admin. **Avant, personne** (ni l'admin de la party, ni le super admin).
+- members : seule mise à jour possible : `hasPicked → true` dans un batch de prono, party ouverte. Retrait : admin de la party ou super admin, jamais le créateur.
+- Résultats : écriture admin de la party ou super admin, document `live` seulement, champs connus ; lecture membres et super admin.
+- `admins` : jamais écrit par le client, lecture de son propre doc.
 - Pseudos : `usernames/{lower}` créé seulement si `users/{uid}.displayNameLower` correspond après écriture ; jamais mis à jour ; libéré uniquement par son propriétaire en changeant de pseudo. `users` modifiable par son propriétaire seulement.
 
 ## Conventions
@@ -101,7 +116,9 @@ Erreurs (`errors.ts`) : `errorMessage(err): string` (français, prêt à affiche
 
 ## Reste à faire
 
-- **Les tests de règles n'ont jamais tourné** : le téléchargement de l'émulateur Firestore (storage.googleapis.com) est bloqué dans l'environnement de l'agent Fondations, et il n'existe pas de compilateur de règles hors ligne. Les règles n'ont donc pas non plus été compilées. Lancer `npm run test:rules` sur une machine avec accès réseau avant tout déploiement, et corriger ce qui échoue.
 - Tous les écrans métier (pages provisoires dans `src/pages/index.tsx`), bandeau « Installer l'app », animation orchestrée des écharpes et confettis.
+- `/connexion` doit renvoyer vers `state.from` après connexion (pour que le lien `/rejoindre/<code>` marche sans compte).
 - Bundle de 900 kB (Firebase) : découper par route avec `React.lazy` si besoin.
 - Le Sash n'a été vérifié que par typecheck/build, pas visuellement dans un navigateur.
+- `useMyParties` et `useMyTrophies` ouvrent un abonnement par party : sans souci pour quelques parties par joueur.
+- Tests de règles sous Windows : JDK 21 requis (firebase-tools), et lancer vitest depuis un chemin `C:\` en majuscule (sinon vitest se charge deux fois et plante sur `reading 'config'`).

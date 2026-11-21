@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
-import { useAuth, useIsAdmin, useProfile } from '../lib'
+import { useAuth, useIsSuperAdmin, useProfile } from '../lib'
 
 function Loading() {
   return (
@@ -27,9 +27,9 @@ export function RequireProfile({ children }: { children: ReactNode }) {
   return children
 }
 
-/** Réservé à l'admin (admins/{uid}) ; sinon retour à l'accueil. */
-export function RequireAdmin({ children }: { children: ReactNode }) {
-  const admin = useIsAdmin()
+/** Réservé au super admin (admins/{uid}) ; sinon retour à l'accueil. */
+export function RequireSuperAdmin({ children }: { children: ReactNode }) {
+  const admin = useIsSuperAdmin()
   if (admin.loading) return <Loading />
   if (!admin.data) return <Navigate to="/" replace />
   return children

@@ -1,20 +1,15 @@
-import {
-  doc,
-  onSnapshot,
-  serverTimestamp,
-  setDoc,
-  Timestamp,
-  updateDoc,
-  writeBatch,
-} from 'firebase/firestore'
+// Administration : actions de l'admin d'une party (son créateur) ou du super admin.
+// Les règles Firestore vérifient les droits ; ces fonctions ne font qu'écrire proprement.
+import { deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
 import { db } from './firebase'
-import { useAuth } from './auth'
+import { requireUid, useAuth } from './auth'
+import { AppError } from './errors'
 import { useSnapshot } from './live'
-import { normalizeCode } from './editions'
-import type { CandidatesFile, EditionStatus, Live, Results } from './types'
+import { PARTY_NAME_MAX, PARTY_NAME_MIN } from './parties'
+import type { Live, Party, PartyStatus, Results } from './types'
 
-/** true si admins/{uid} existe (document créé à la main dans la console). */
-export function useIsAdmin(): Live<boolean> {
+/** true si admins/{uid} existe : super admin (document créé à la main dans la console). */
+export function useIsSuperAdmin(): Live<boolean> {
   const { user } = useAuth()
   return useSnapshot<boolean>(
     user ? `admins/${user.uid}` : null,
@@ -23,62 +18,44 @@ export function useIsAdmin(): Live<boolean> {
   )
 }
 
-/** Crée une édition (statut open) et son code de soirée. id conseillé : l'année, ex. "2027". */
-export async function createEdition(input: {
-  id: string
-  title: string
-  showAt: Date
-  code: string
-}): Promise<void> {
+/**
+ * Change la phase de la party (retour en arrière permis). Écrit dans le même batch
+ * l'entrée parties/{p}/events/{n} (de, vers, par qui, heure serveur), visible de tous les membres.
+ * Passe la party telle que lue : son statusChanges sert de compteur.
+ */
+export async function setPartyStatus(party: Party, status: PartyStatus): Promise<void> {
+  const uid = requireUid()
+  if (status === party.status) return
+  const n = party.statusChanges + 1
   const batch = writeBatch(db)
-  batch.set(doc(db, 'editions', input.id), {
-    title: input.title,
-    showAt: Timestamp.fromDate(input.showAt),
-    status: 'open',
-    createdAt: serverTimestamp(),
+  batch.update(doc(db, 'parties', party.id), { status, statusChanges: n })
+  batch.set(doc(db, 'parties', party.id, 'events', String(n)), {
+    from: party.status,
+    to: status,
+    by: uid,
+    at: serverTimestamp(),
   })
-  batch.set(doc(db, 'editionSecrets', input.id), { code: normalizeCode(input.code) })
   await batch.commit()
 }
 
-/** Modifie le titre et/ou la date d'émission. */
-export async function updateEdition(
-  editionId: string,
-  patch: { title?: string; showAt?: Date },
-): Promise<void> {
-  await updateDoc(doc(db, 'editions', editionId), {
-    ...(patch.title !== undefined && { title: patch.title }),
-    ...(patch.showAt !== undefined && { showAt: Timestamp.fromDate(patch.showAt) }),
-  })
-}
-
-/** Change le code de soirée (normalisé : majuscules, sans espaces, 4 caractères minimum). */
-export async function setEditionCode(editionId: string, code: string): Promise<void> {
-  await setDoc(doc(db, 'editionSecrets', editionId), { code: normalizeCode(code) })
-}
-
-/** Importe (ou réimporte) les candidates d'un fichier candidates.json. */
-export async function importCandidates(editionId: string, file: CandidatesFile): Promise<number> {
-  const batch = writeBatch(db)
-  for (const c of file.candidates) {
-    batch.set(doc(db, 'editions', editionId, 'candidates', c.id), c)
+/** Renomme la party. */
+export async function renameParty(partyId: string, name: string): Promise<void> {
+  const trimmed = name.trim()
+  if (trimmed.length < PARTY_NAME_MIN || trimmed.length > PARTY_NAME_MAX) {
+    throw new AppError('party-invalid', `Le nom doit faire entre ${PARTY_NAME_MIN} et ${PARTY_NAME_MAX} caractères.`)
   }
-  await batch.commit()
-  return file.candidates.length
+  await updateDoc(doc(db, 'parties', partyId), { name: trimmed })
 }
 
-/** Change de phase (retour en arrière autorisé). */
-export async function setStatus(editionId: string, status: EditionStatus): Promise<void> {
-  await updateDoc(doc(db, 'editions', editionId), { status })
+/** Retire un membre de la party (pas son créateur). */
+export async function removeMember(partyId: string, uid: string): Promise<void> {
+  await deleteDoc(doc(db, 'parties', partyId, 'members', uid))
 }
 
-/** Saisit tout ou partie des résultats (fusion). Passe null pour effacer un champ. */
-export async function setResults(
-  editionId: string,
-  patch: Partial<Omit<Results, 'updatedAt'>>,
-): Promise<void> {
+/** Saisit tout ou partie des résultats de la party (fusion). Passe null pour effacer un champ. */
+export async function setResults(partyId: string, patch: Partial<Omit<Results, 'updatedAt'>>): Promise<void> {
   await setDoc(
-    doc(db, 'editions', editionId, 'results', 'live'),
+    doc(db, 'parties', partyId, 'results', 'live'),
     { ...patch, updatedAt: serverTimestamp() },
     { merge: true },
   )

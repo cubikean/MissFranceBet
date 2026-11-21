@@ -1,6 +1,9 @@
 // Tests des règles Firestore contre l'émulateur : npm run test:rules
+//
+// Distribution : boss = super admin ; olga = créatrice et admin de la party P ; alice et bob =
+// membres de P ; carol = joueuse sans party ; dan = créateur d'une autre party (P2).
 import { readFileSync } from 'node:fs'
-import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
   assertFails,
   assertSucceeds,
@@ -9,6 +12,7 @@ import {
 } from '@firebase/rules-unit-testing'
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
@@ -25,57 +29,98 @@ import {
 } from 'firebase/firestore'
 
 const E = '2027'
-const CODE = 'STRASS'
+const P = 'p1'
+const P2 = 'p2'
+const CODE = 'K7QMZ3'
+const CODE2 = 'DANDAN'
 let env: RulesTestEnvironment
 
 const dbAs = (uid: string | null): Firestore =>
   (uid ? env.authenticatedContext(uid).firestore() : env.unauthenticatedContext().firestore()) as unknown as Firestore
 
+const partyDoc = (db: Firestore, p = P) => doc(db, 'parties', p)
+const sub = (db: Firestore, name: string, id: string, p = P) => doc(db, 'parties', p, name, id)
+
 /** Écrit un prono comme le fait setPick (batch pick + historique + hasPicked). */
-async function pick(db: Firestore, uid: string, candidateId: string, n: number) {
+async function pick(db: Firestore, uid: string, candidateId: string, n: number, p = P) {
   const b = writeBatch(db)
-  b.set(doc(db, 'editions', E, 'picks', uid), { candidateId, changeCount: n, updatedAt: serverTimestamp() })
-  b.set(doc(db, 'editions', E, 'pickHistory', `${uid}_${n}`), {
-    uid,
-    candidateId,
-    changeCount: n,
-    at: serverTimestamp(),
+  b.set(sub(db, 'picks', uid, p), { candidateId, changeCount: n, updatedAt: serverTimestamp() })
+  b.set(sub(db, 'pickHistory', `${uid}_${n}`, p), { uid, candidateId, changeCount: n, at: serverTimestamp() })
+  b.update(sub(db, 'members', uid, p), { hasPicked: true })
+  return b.commit()
+}
+
+/** Rejoint comme le fait joinParty : preuve du code + adhésion dans le même batch. */
+async function joinBatch(db: Firestore, uid: string, code: string, extra: Record<string, unknown> = {}, p = P) {
+  const b = writeBatch(db)
+  b.set(sub(db, 'joinProofs', uid, p), { code })
+  b.set(sub(db, 'members', uid, p), { uid, editionId: E, joinedAt: serverTimestamp(), hasPicked: false, ...extra })
+  return b.commit()
+}
+
+/** Crée une party comme le fait createParty. `over` permet de fausser un champ. */
+async function createBatch(
+  db: Firestore,
+  uid: string,
+  p: string,
+  code: string,
+  over: { party?: Record<string, unknown>; codeDoc?: Record<string, unknown> | null; member?: boolean } = {},
+) {
+  const b = writeBatch(db)
+  b.set(partyDoc(db, p), {
+    editionId: E,
+    name: 'Les copains',
+    ownerUid: uid,
+    code,
+    status: 'open',
+    statusChanges: 0,
+    createdAt: serverTimestamp(),
+    ...over.party,
   })
-  b.update(doc(db, 'editions', E, 'members', uid), { hasPicked: true })
+  if (over.codeDoc !== null) b.set(doc(db, 'partyCodes', code), { partyId: p, editionId: E, ...over.codeDoc })
+  if (over.member !== false) {
+    b.set(sub(db, 'members', uid, p), { uid, editionId: E, joinedAt: serverTimestamp(), hasPicked: false })
+  }
   return b.commit()
 }
 
-/** Rejoint comme le fait joinEdition : preuve du code + adhésion dans le même batch. */
-async function joinBatch(db: Firestore, uid: string, code: string, extra: Record<string, unknown> = {}) {
+/** Change de phase comme le fait setPartyStatus (party + events/{n} dans le même batch). */
+async function setStatus(db: Firestore, uid: string, from: string, to: string, n: number, event: Record<string, unknown> = {}) {
   const b = writeBatch(db)
-  b.set(doc(db, 'editions', E, 'joinProofs', uid), { code })
-  b.set(doc(db, 'editions', E, 'members', uid), { joinedAt: serverTimestamp(), hasPicked: false, ...extra })
+  b.update(partyDoc(db), { status: to, statusChanges: n })
+  b.set(sub(db, 'events', String(n)), { from, to, by: uid, at: serverTimestamp(), ...event })
   return b.commit()
 }
 
-async function seed(status: 'open' | 'closed' | 'finished' = 'open') {
+async function seed() {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore() as unknown as Firestore
-    await setDoc(doc(db, 'admins', 'admin'), {})
-    await setDoc(doc(db, 'editions', E), {
-      title: 'Miss France 2027',
-      showAt: Timestamp.fromDate(new Date('2026-12-12T20:10:00+01:00')),
-      status,
-      createdAt: Timestamp.now(),
-    })
-    await setDoc(doc(db, 'editionSecrets', E), { code: CODE })
-    for (const id of ['bretagne', 'corse', 'provence']) {
-      await setDoc(doc(db, 'editions', E, 'candidates', id), { id, region: id, order: 0 })
-    }
-    for (const uid of ['alice', 'bob']) {
-      await setDoc(doc(db, 'editions', E, 'members', uid), { joinedAt: Timestamp.now(), hasPicked: false })
+    await setDoc(doc(db, 'admins', 'boss'), {})
+    const parties: Array<[string, string, string, string[]]> = [
+      [P, 'olga', CODE, ['olga', 'alice', 'bob']],
+      [P2, 'dan', CODE2, ['dan']],
+    ]
+    for (const [p, owner, code, members] of parties) {
+      await setDoc(doc(db, 'parties', p), {
+        editionId: E,
+        name: `Party de ${owner}`,
+        ownerUid: owner,
+        code,
+        status: 'open',
+        statusChanges: 0,
+        createdAt: Timestamp.now(),
+      })
+      await setDoc(doc(db, 'partyCodes', code), { partyId: p, editionId: E })
+      for (const uid of members) {
+        await setDoc(doc(db, 'parties', p, 'members', uid), { uid, editionId: E, joinedAt: Timestamp.now(), hasPicked: false })
+      }
     }
   })
 }
 
 async function setStatusRaw(status: string) {
   await env.withSecurityRulesDisabled(async (ctx) => {
-    await updateDoc(doc(ctx.firestore() as unknown as Firestore, 'editions', E), { status })
+    await updateDoc(doc(ctx.firestore() as unknown as Firestore, 'parties', P), { status })
   })
 }
 
@@ -95,6 +140,128 @@ beforeEach(async () => {
   await seed()
 })
 
+describe('création de party', () => {
+  it('crée une party : son créateur en est admin et membre, le code est réservé', async () => {
+    await assertSucceeds(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF'))
+    const party = await getDoc(partyDoc(dbAs('carol'), 'p3'))
+    expect(party.data()?.ownerUid).toBe('carol')
+  })
+
+  it('refuse un code déjà pris par une autre party', async () => {
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', CODE))
+  })
+
+  it('refuse une party sans code réservé ou sans adhésion du créateur', async () => {
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { codeDoc: null }))
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { member: false }))
+  })
+
+  it('refuse de créer une party au nom d’un autre', async () => {
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { party: { ownerUid: 'alice' } }))
+  })
+
+  it('refuse une party qui ne démarre pas ouverte à zéro', async () => {
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { party: { status: 'closed' } }))
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { party: { statusChanges: 3 } }))
+  })
+
+  it('refuse un code mal formé, une édition invalide ou un nom invalide', async () => {
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'abc'))
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDE0'))
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { party: { editionId: 'x' } }))
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { party: { name: 'x' } }))
+  })
+
+  it('refuse un code dont l’édition ne correspond pas à la party', async () => {
+    await assertFails(createBatch(dbAs('carol'), 'carol', 'p3', 'ABCDEF', { codeDoc: { editionId: '2028' } }))
+  })
+
+  it('refuse d’ajouter un second code à une party existante', async () => {
+    await assertFails(setDoc(doc(dbAs('olga'), 'partyCodes', 'ZZZZZZ'), { partyId: P, editionId: E }))
+  })
+
+  it('laisse lire un code par son id, mais pas lister ni modifier les codes', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('carol'), 'partyCodes', CODE)))
+    await assertFails(getDocs(collection(dbAs('carol'), 'partyCodes')))
+    await assertFails(updateDoc(doc(dbAs('olga'), 'partyCodes', CODE), { partyId: P2 }))
+    await assertFails(deleteDoc(doc(dbAs('olga'), 'partyCodes', CODE)))
+  })
+})
+
+describe('rejoindre une party', () => {
+  it('accepte le bon code', async () => {
+    await assertSucceeds(joinBatch(dbAs('carol'), 'carol', CODE))
+  })
+
+  it('refuse un mauvais code, ou le code d’une autre party', async () => {
+    await assertFails(joinBatch(dbAs('carol'), 'carol', 'AAAAAA'))
+    await assertFails(joinBatch(dbAs('carol'), 'carol', CODE2))
+  })
+
+  it('refuse de rejoindre à la place d’un autre', async () => {
+    const carol = dbAs('carol')
+    const b = writeBatch(carol)
+    b.set(sub(carol, 'joinProofs', 'carol'), { code: CODE })
+    b.set(sub(carol, 'members', 'dave'), { uid: 'dave', editionId: E, joinedAt: serverTimestamp(), hasPicked: false })
+    await assertFails(b.commit())
+  })
+
+  it('refuse de rejoindre sans preuve du code', async () => {
+    await assertFails(
+      setDoc(sub(dbAs('carol'), 'members', 'carol'), { uid: 'carol', editionId: E, joinedAt: serverTimestamp(), hasPicked: false }),
+    )
+  })
+
+  it('refuse de stocker le code dans l’adhésion, ou une édition incohérente', async () => {
+    await assertFails(joinBatch(dbAs('carol'), 'carol', CODE, { code: CODE }))
+    await assertFails(joinBatch(dbAs('carol'), 'carol', CODE, { editionId: '2028' }))
+    await assertFails(joinBatch(dbAs('carol'), 'carol', CODE, { hasPicked: true }))
+  })
+
+  it('rend la preuve illisible, même pour son auteur et le super admin, puis la laisse supprimer', async () => {
+    await assertSucceeds(joinBatch(dbAs('carol'), 'carol', CODE))
+    await assertFails(getDoc(sub(dbAs('carol'), 'joinProofs', 'carol')))
+    await assertFails(getDoc(sub(dbAs('olga'), 'joinProofs', 'carol')))
+    await assertFails(getDoc(sub(dbAs('boss'), 'joinProofs', 'carol')))
+    await assertFails(getDocs(collection(dbAs('carol'), 'parties', P, 'joinProofs')))
+    await assertFails(deleteDoc(sub(dbAs('alice'), 'joinProofs', 'carol')))
+    await assertSucceeds(deleteDoc(sub(dbAs('carol'), 'joinProofs', 'carol')))
+  })
+
+  it('refuse une preuve écrite pour quelqu’un d’autre', async () => {
+    await assertFails(setDoc(sub(dbAs('carol'), 'joinProofs', 'dave'), { code: CODE }))
+  })
+})
+
+describe('lecture des parties', () => {
+  it('montre la party et son code aux membres seulement', async () => {
+    const snap = await getDoc(partyDoc(dbAs('alice')))
+    expect(snap.data()?.code).toBe(CODE)
+    await assertFails(getDoc(partyDoc(dbAs('carol'))))
+    await assertFails(getDoc(partyDoc(dbAs('dan'))))
+  })
+
+  it('cache la liste des membres aux non-membres', async () => {
+    await assertFails(getDocs(collection(dbAs('carol'), 'parties', P, 'members')))
+    await assertFails(getDocs(collection(dbAs('dan'), 'parties', P, 'members')))
+    await assertSucceeds(getDocs(collection(dbAs('alice'), 'parties', P, 'members')))
+  })
+
+  it('ne laisse lister toutes les parties qu’au super admin', async () => {
+    await assertFails(getDocs(collection(dbAs('olga'), 'parties')))
+    await assertSucceeds(getDocs(collection(dbAs('boss'), 'parties')))
+    await assertSucceeds(getDoc(partyDoc(dbAs('boss'))))
+  })
+
+  it('laisse chacun lister ses propres adhésions, pas celles des autres', async () => {
+    const alice = dbAs('alice')
+    const mine = await getDocs(query(collectionGroup(alice, 'members'), where('uid', '==', 'alice')))
+    expect(mine.docs.map((d) => d.ref.parent.parent?.id)).toEqual([P])
+    await assertFails(getDocs(query(collectionGroup(alice, 'members'), where('uid', '==', 'dan'))))
+    await assertFails(getDocs(collectionGroup(alice, 'members')))
+  })
+})
+
 describe('pronos', () => {
   it('accepte un premier prono puis un changement d’avis', async () => {
     const alice = dbAs('alice')
@@ -106,17 +273,19 @@ describe('pronos', () => {
     const alice = dbAs('alice')
     await assertFails(pick(alice, 'bob', 'bretagne', 1))
     const b = writeBatch(alice)
-    b.set(doc(alice, 'editions', E, 'picks', 'bob'), { candidateId: 'corse', changeCount: 1, updatedAt: serverTimestamp() })
-    b.set(doc(alice, 'editions', E, 'pickHistory', 'bob_1'), { uid: 'bob', candidateId: 'corse', changeCount: 1, at: serverTimestamp() })
+    b.set(sub(alice, 'picks', 'bob'), { candidateId: 'corse', changeCount: 1, updatedAt: serverTimestamp() })
+    b.set(sub(alice, 'pickHistory', 'bob_1'), { uid: 'bob', candidateId: 'corse', changeCount: 1, at: serverTimestamp() })
     await assertFails(b.commit())
   })
 
-  it('refuse un prono si on n’est pas membre', async () => {
-    const carol = dbAs('carol')
-    const b = writeBatch(carol)
-    b.set(doc(carol, 'editions', E, 'picks', 'carol'), { candidateId: 'corse', changeCount: 1, updatedAt: serverTimestamp() })
-    b.set(doc(carol, 'editions', E, 'pickHistory', 'carol_1'), { uid: 'carol', candidateId: 'corse', changeCount: 1, at: serverTimestamp() })
-    await assertFails(b.commit())
+  it('refuse un prono si on n’est pas membre de la party', async () => {
+    for (const uid of ['carol', 'dan']) {
+      const db = dbAs(uid)
+      const b = writeBatch(db)
+      b.set(sub(db, 'picks', uid), { candidateId: 'corse', changeCount: 1, updatedAt: serverTimestamp() })
+      b.set(sub(db, 'pickHistory', `${uid}_1`), { uid, candidateId: 'corse', changeCount: 1, at: serverTimestamp() })
+      await assertFails(b.commit())
+    }
   })
 
   it('refuse d’écrire après la fermeture', async () => {
@@ -132,8 +301,8 @@ describe('pronos', () => {
     const alice = dbAs('alice')
     const fake = Timestamp.fromDate(new Date('2026-12-01'))
     const b = writeBatch(alice)
-    b.set(doc(alice, 'editions', E, 'picks', 'alice'), { candidateId: 'corse', changeCount: 1, updatedAt: fake })
-    b.set(doc(alice, 'editions', E, 'pickHistory', 'alice_1'), { uid: 'alice', candidateId: 'corse', changeCount: 1, at: fake })
+    b.set(sub(alice, 'picks', 'alice'), { candidateId: 'corse', changeCount: 1, updatedAt: fake })
+    b.set(sub(alice, 'pickHistory', 'alice_1'), { uid: 'alice', candidateId: 'corse', changeCount: 1, at: fake })
     await assertFails(b.commit())
   })
 
@@ -146,16 +315,14 @@ describe('pronos', () => {
   })
 
   it('refuse un prono sans historique', async () => {
-    const alice = dbAs('alice')
     await assertFails(
-      setDoc(doc(alice, 'editions', E, 'picks', 'alice'), { candidateId: 'corse', changeCount: 1, updatedAt: serverTimestamp() }),
+      setDoc(sub(dbAs('alice'), 'picks', 'alice'), { candidateId: 'corse', changeCount: 1, updatedAt: serverTimestamp() }),
     )
   })
 
   it('refuse un historique sans prono', async () => {
-    const alice = dbAs('alice')
     await assertFails(
-      setDoc(doc(alice, 'editions', E, 'pickHistory', 'alice_1'), {
+      setDoc(sub(dbAs('alice'), 'pickHistory', 'alice_1'), {
         uid: 'alice',
         candidateId: 'corse',
         changeCount: 1,
@@ -167,115 +334,60 @@ describe('pronos', () => {
   it('refuse un historique incohérent avec le prono', async () => {
     const alice = dbAs('alice')
     const b = writeBatch(alice)
-    b.set(doc(alice, 'editions', E, 'picks', 'alice'), { candidateId: 'corse', changeCount: 1, updatedAt: serverTimestamp() })
-    b.set(doc(alice, 'editions', E, 'pickHistory', 'alice_1'), { uid: 'alice', candidateId: 'bretagne', changeCount: 1, at: serverTimestamp() })
+    b.set(sub(alice, 'picks', 'alice'), { candidateId: 'corse', changeCount: 1, updatedAt: serverTimestamp() })
+    b.set(sub(alice, 'pickHistory', 'alice_1'), { uid: 'alice', candidateId: 'bretagne', changeCount: 1, at: serverTimestamp() })
     await assertFails(b.commit())
   })
 
-  it('refuse une candidate inexistante', async () => {
-    await assertFails(pick(dbAs('alice'), 'alice', 'atlantide', 1))
+  it('refuse un identifiant de candidate mal formé', async () => {
+    await assertFails(pick(dbAs('alice'), 'alice', 'Atlantide!', 1))
+    await assertFails(pick(dbAs('alice'), 'alice', '', 1))
   })
 
   it('refuse de modifier ou supprimer un historique ou un prono', async () => {
     const alice = dbAs('alice')
     await assertSucceeds(pick(alice, 'alice', 'bretagne', 1))
-    const h = doc(alice, 'editions', E, 'pickHistory', 'alice_1')
+    const h = sub(alice, 'pickHistory', 'alice_1')
     await assertFails(updateDoc(h, { candidateId: 'corse' }))
     await assertFails(setDoc(h, { uid: 'alice', candidateId: 'corse', changeCount: 1, at: serverTimestamp() }))
     await assertFails(deleteDoc(h))
-    await assertFails(deleteDoc(doc(alice, 'editions', E, 'picks', 'alice')))
+    await assertFails(deleteDoc(sub(alice, 'picks', 'alice')))
+    await assertFails(deleteDoc(sub(dbAs('boss'), 'picks', 'alice')))
   })
 
-  it('cache les pronos et historiques des autres avant la fermeture', async () => {
+  it('cache les pronos des autres avant la fermeture, admin de party et super admin compris', async () => {
     await assertSucceeds(pick(dbAs('alice'), 'alice', 'bretagne', 1))
     await assertSucceeds(pick(dbAs('bob'), 'bob', 'corse', 1))
     const alice = dbAs('alice')
-    await assertSucceeds(getDoc(doc(alice, 'editions', E, 'picks', 'alice')))
-    await assertSucceeds(getDocs(query(collection(alice, 'editions', E, 'pickHistory'), where('uid', '==', 'alice'))))
-    await assertFails(getDoc(doc(alice, 'editions', E, 'picks', 'bob')))
-    await assertFails(getDocs(collection(alice, 'editions', E, 'picks')))
-    await assertFails(getDoc(doc(alice, 'editions', E, 'pickHistory', 'bob_1')))
-    await assertFails(getDocs(collection(alice, 'editions', E, 'pickHistory')))
-    // l'admin voit tout
-    await assertSucceeds(getDocs(collection(dbAs('admin'), 'editions', E, 'picks')))
+    await assertSucceeds(getDoc(sub(alice, 'picks', 'alice')))
+    await assertSucceeds(getDocs(query(collection(alice, 'parties', P, 'pickHistory'), where('uid', '==', 'alice'))))
+    await assertFails(getDoc(sub(alice, 'picks', 'bob')))
+    await assertFails(getDocs(collection(alice, 'parties', P, 'picks')))
+    await assertFails(getDoc(sub(alice, 'pickHistory', 'bob_1')))
+    await assertFails(getDocs(collection(alice, 'parties', P, 'pickHistory')))
+    for (const uid of ['olga', 'boss']) {
+      await assertFails(getDocs(collection(dbAs(uid), 'parties', P, 'picks')))
+      await assertFails(getDoc(sub(dbAs(uid), 'picks', 'bob')))
+      await assertFails(getDocs(collection(dbAs(uid), 'parties', P, 'pickHistory')))
+    }
   })
 
-  it('révèle tout aux membres après la fermeture, pas aux non-membres', async () => {
+  it('révèle tout aux membres et au super admin après la fermeture, pas aux autres', async () => {
     await assertSucceeds(pick(dbAs('alice'), 'alice', 'bretagne', 1))
     await assertSucceeds(pick(dbAs('bob'), 'bob', 'corse', 1))
     await setStatusRaw('closed')
     const alice = dbAs('alice')
-    await assertSucceeds(getDoc(doc(alice, 'editions', E, 'picks', 'bob')))
-    await assertSucceeds(getDocs(collection(alice, 'editions', E, 'picks')))
-    await assertSucceeds(getDocs(collection(alice, 'editions', E, 'pickHistory')))
-    await assertFails(getDocs(collection(dbAs('carol'), 'editions', E, 'picks')))
-  })
-})
-
-describe('code de soirée', () => {
-  const join = (uid: string, code: string) => joinBatch(dbAs(uid), uid, code)
-
-  it('accepte le bon code', async () => {
-    await assertSucceeds(join('carol', CODE))
-  })
-
-  it('refuse un mauvais code', async () => {
-    await assertFails(join('carol', 'PAILLETTE'))
-  })
-
-  it('refuse de rejoindre à la place d’un autre', async () => {
-    await assertFails(joinBatch(dbAs('carol'), 'dave', CODE))
-  })
-
-  it('refuse de rejoindre sans preuve du code', async () => {
-    await assertFails(
-      setDoc(doc(dbAs('carol'), 'editions', E, 'members', 'carol'), { joinedAt: serverTimestamp(), hasPicked: false }),
-    )
-  })
-
-  it('refuse de stocker le code dans l’adhésion', async () => {
-    await assertFails(joinBatch(dbAs('carol'), 'carol', CODE, { code: CODE }))
-  })
-
-  it('rend la preuve illisible, même pour son auteur et l’admin, puis la laisse supprimer', async () => {
-    await assertSucceeds(join('carol', CODE))
-    const proof = (uid: string) => doc(dbAs(uid), 'editions', E, 'joinProofs', 'carol')
-    await assertFails(getDoc(proof('carol')))
-    await assertFails(getDoc(proof('alice')))
-    await assertFails(getDoc(proof('admin')))
-    await assertFails(getDocs(collection(dbAs('carol'), 'editions', E, 'joinProofs')))
-    await assertFails(deleteDoc(proof('alice')))
-    await assertSucceeds(deleteDoc(proof('carol')))
-  })
-
-  it('refuse une preuve écrite pour quelqu’un d’autre', async () => {
-    await assertFails(setDoc(doc(dbAs('carol'), 'editions', E, 'joinProofs', 'dave'), { code: CODE }))
-  })
-
-  it('ne laisse pas un membre ajouter un code à son adhésion', async () => {
-    await assertFails(
-      updateDoc(doc(dbAs('alice'), 'editions', E, 'members', 'alice'), { code: CODE }),
-    )
-  })
-
-  it('ne laisse lire editionSecrets à personne, admin compris', async () => {
-    await assertFails(getDoc(doc(dbAs('alice'), 'editionSecrets', E)))
-    await assertFails(getDoc(doc(dbAs('admin'), 'editionSecrets', E)))
-    await assertFails(getDocs(collection(dbAs('alice'), 'editionSecrets')))
-  })
-
-  it('cache la liste des membres aux non-membres', async () => {
-    await assertFails(getDocs(collection(dbAs('carol'), 'editions', E, 'members')))
-    await assertSucceeds(getDocs(collection(dbAs('alice'), 'editions', E, 'members')))
+    await assertSucceeds(getDoc(sub(alice, 'picks', 'bob')))
+    await assertSucceeds(getDocs(collection(alice, 'parties', P, 'picks')))
+    await assertSucceeds(getDocs(collection(alice, 'parties', P, 'pickHistory')))
+    await assertSucceeds(getDocs(collection(dbAs('boss'), 'parties', P, 'picks')))
+    await assertFails(getDocs(collection(dbAs('carol'), 'parties', P, 'picks')))
+    await assertFails(getDocs(collection(dbAs('dan'), 'parties', P, 'picks')))
   })
 })
 
 describe('membres et hasPicked', () => {
-  const member = (uid: string) => doc(dbAs(uid), 'editions', E, 'members', uid)
-
-  it('refuse de rejoindre avec hasPicked déjà à true', async () => {
-    await assertFails(joinBatch(dbAs('carol'), 'carol', CODE, { hasPicked: true }))
-  })
+  const member = (uid: string, target = uid) => sub(dbAs(uid), 'members', target)
 
   it('refuse de passer hasPicked à true sans prono', async () => {
     await assertFails(updateDoc(member('alice'), { hasPicked: true }))
@@ -286,8 +398,9 @@ describe('membres et hasPicked', () => {
     await assertFails(updateDoc(member('alice'), { hasPicked: false }))
   })
 
-  it('refuse de modifier sa date d’arrivée', async () => {
+  it('refuse de modifier sa date d’arrivée ou d’ajouter un champ', async () => {
     await assertFails(updateDoc(member('alice'), { joinedAt: serverTimestamp() }))
+    await assertFails(updateDoc(member('alice'), { code: CODE }))
   })
 
   it('refuse de toucher à hasPicked après la fermeture', async () => {
@@ -296,50 +409,126 @@ describe('membres et hasPicked', () => {
     await assertFails(updateDoc(member('alice'), { hasPicked: true }))
   })
 
-  it('refuse de supprimer son adhésion (réservé à l’admin)', async () => {
+  it('laisse l’admin de la party et le super admin retirer un membre, pas les autres', async () => {
     await assertFails(deleteDoc(member('alice')))
-    await assertSucceeds(deleteDoc(doc(dbAs('admin'), 'editions', E, 'members', 'alice')))
+    await assertFails(deleteDoc(member('alice', 'bob')))
+    await assertFails(deleteDoc(member('dan', 'bob')))
+    await assertSucceeds(deleteDoc(member('olga', 'alice')))
+    await assertSucceeds(deleteDoc(member('boss', 'bob')))
+  })
+
+  it('interdit de retirer le créateur de la party', async () => {
+    await assertFails(deleteDoc(member('olga')))
+    await assertFails(deleteDoc(member('boss', 'olga')))
+  })
+})
+
+describe('phases et journal', () => {
+  it('laisse l’admin de la party fermer les pronos avec une entrée au journal', async () => {
+    await assertSucceeds(setStatus(dbAs('olga'), 'olga', 'open', 'closed', 1))
+    const event = await getDoc(sub(dbAs('alice'), 'events', '1'))
+    expect(event.data()).toMatchObject({ from: 'open', to: 'closed', by: 'olga' })
+  })
+
+  it('autorise la réouverture, journalisée elle aussi', async () => {
+    await assertSucceeds(setStatus(dbAs('olga'), 'olga', 'open', 'closed', 1))
+    await assertSucceeds(setStatus(dbAs('olga'), 'olga', 'closed', 'open', 2))
+    const events = await getDocs(collection(dbAs('bob'), 'parties', P, 'events'))
+    expect(events.size).toBe(2)
+  })
+
+  it('refuse un changement de phase sans entrée au journal', async () => {
+    await assertFails(updateDoc(partyDoc(dbAs('olga')), { status: 'closed', statusChanges: 1 }))
+    await assertFails(updateDoc(partyDoc(dbAs('olga')), { status: 'closed' }))
+  })
+
+  it('refuse un journal faussé (de, vers, auteur, numéro, heure)', async () => {
+    const olga = dbAs('olga')
+    await assertFails(setStatus(olga, 'olga', 'closed', 'closed', 1))
+    await assertFails(setStatus(olga, 'olga', 'finished', 'closed', 1))
+    await assertFails(setStatus(olga, 'olga', 'open', 'closed', 1, { to: 'finished' }))
+    await assertFails(setStatus(olga, 'olga', 'open', 'closed', 1, { by: 'alice' }))
+    await assertFails(setStatus(olga, 'olga', 'open', 'closed', 2))
+    await assertFails(setStatus(olga, 'olga', 'open', 'closed', 1, { at: Timestamp.fromDate(new Date('2026-12-12')) }))
+  })
+
+  it('refuse un changement de phase par un simple membre ou l’admin d’une autre party', async () => {
+    await assertFails(setStatus(dbAs('alice'), 'alice', 'open', 'closed', 1))
+    await assertFails(setStatus(dbAs('dan'), 'dan', 'open', 'closed', 1))
+  })
+
+  it('laisse le super admin changer la phase de n’importe quelle party', async () => {
+    await assertSucceeds(setStatus(dbAs('boss'), 'boss', 'open', 'closed', 1))
+  })
+
+  it('rend le journal immuable et invisible des non-membres', async () => {
+    await assertSucceeds(setStatus(dbAs('olga'), 'olga', 'open', 'closed', 1))
+    await assertFails(updateDoc(sub(dbAs('olga'), 'events', '1'), { by: 'bob' }))
+    await assertFails(deleteDoc(sub(dbAs('olga'), 'events', '1')))
+    await assertFails(deleteDoc(sub(dbAs('boss'), 'events', '1')))
+    await assertFails(getDocs(collection(dbAs('carol'), 'parties', P, 'events')))
+  })
+
+  it('laisse renommer la party, mais pas changer son créateur, son code ou son édition', async () => {
+    const olga = dbAs('olga')
+    await assertSucceeds(updateDoc(partyDoc(olga), { name: 'Les Miss du 12' }))
+    await assertFails(updateDoc(partyDoc(olga), { name: 'x' }))
+    await assertFails(updateDoc(partyDoc(dbAs('alice')), { name: 'Piratée' }))
+    await assertFails(updateDoc(partyDoc(olga), { ownerUid: 'alice' }))
+    await assertFails(updateDoc(partyDoc(olga), { code: 'ZZZZZZ' }))
+    await assertFails(updateDoc(partyDoc(olga), { editionId: '2028' }))
+  })
+
+  it('ne laisse supprimer une party qu’au super admin', async () => {
+    await assertFails(deleteDoc(partyDoc(dbAs('olga'))))
+    await assertSucceeds(deleteDoc(partyDoc(dbAs('boss'))))
+  })
+})
+
+describe('résultats', () => {
+  const results = (uid: string, data: Record<string, unknown> = { winner: 'bretagne', updatedAt: serverTimestamp() }) =>
+    setDoc(sub(dbAs(uid), 'results', 'live'), data, { merge: true })
+
+  it('laisse l’admin de la party et le super admin saisir les résultats', async () => {
+    await assertSucceeds(results('olga'))
+    await assertSucceeds(results('boss'))
+    await assertSucceeds(getDoc(sub(dbAs('alice'), 'results', 'live')))
+  })
+
+  it('refuse les résultats saisis par un membre, l’admin d’une autre party ou un inconnu', async () => {
+    await assertFails(results('alice'))
+    await assertFails(results('dan'))
+    await assertFails(results('carol'))
+    await assertFails(getDoc(sub(dbAs('carol'), 'results', 'live')))
+  })
+
+  it('refuse un autre document que live ou des champs inconnus', async () => {
+    await assertFails(setDoc(sub(dbAs('olga'), 'results', 'autre'), { winner: 'bretagne' }))
+    await assertFails(results('olga', { winner: 'bretagne', trophee: 'olga' }))
+  })
+})
+
+describe('super admin', () => {
+  it('refuse de se rendre super admin', async () => {
+    await assertFails(setDoc(doc(dbAs('alice'), 'admins', 'alice'), {}))
+    await assertFails(setDoc(doc(dbAs('boss'), 'admins', 'alice'), {}))
+  })
+
+  it('ne laisse lire que son propre statut', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('alice'), 'admins', 'alice')))
+    await assertFails(getDoc(doc(dbAs('alice'), 'admins', 'boss')))
   })
 })
 
 describe('visiteur non connecté', () => {
   it('ne peut rien lire ni écrire', async () => {
     const db = dbAs(null)
-    await assertFails(getDoc(doc(db, 'editions', E)))
-    await assertFails(getDocs(collection(db, 'editions', E, 'candidates')))
+    await assertFails(getDoc(partyDoc(db)))
+    await assertFails(getDoc(doc(db, 'partyCodes', CODE)))
     await assertFails(getDoc(doc(db, 'users', 'alice')))
     await assertFails(getDoc(doc(db, 'usernames', 'alice')))
-    await assertFails(getDocs(collection(db, 'editions', E, 'members')))
+    await assertFails(getDocs(collection(db, 'parties', P, 'members')))
     await assertFails(joinBatch(db, 'carol', CODE))
-  })
-})
-
-describe('admin', () => {
-  it('refuse de se rendre admin', async () => {
-    await assertFails(setDoc(doc(dbAs('alice'), 'admins', 'alice'), {}))
-    await assertFails(setDoc(doc(dbAs('admin'), 'admins', 'alice'), {}))
-  })
-
-  it('ne laisse lire que son propre statut admin', async () => {
-    await assertSucceeds(getDoc(doc(dbAs('alice'), 'admins', 'alice')))
-    await assertFails(getDoc(doc(dbAs('alice'), 'admins', 'admin')))
-  })
-
-  it('refuse résultats, statut, candidates et code aux non-admins', async () => {
-    const alice = dbAs('alice')
-    await assertFails(setDoc(doc(alice, 'editions', E, 'results', 'live'), { winner: 'bretagne' }))
-    await assertFails(updateDoc(doc(alice, 'editions', E), { status: 'closed' }))
-    await assertFails(setDoc(doc(alice, 'editions', E, 'candidates', 'x'), { region: 'X' }))
-    await assertFails(setDoc(doc(alice, 'editionSecrets', E), { code: 'HACKED' }))
-  })
-
-  it('autorise l’admin à saisir résultats, statut et code', async () => {
-    const admin = dbAs('admin')
-    await assertSucceeds(setDoc(doc(admin, 'editions', E, 'results', 'live'), { winner: 'bretagne', updatedAt: serverTimestamp() }))
-    await assertSucceeds(updateDoc(doc(admin, 'editions', E), { status: 'closed' }))
-    await assertSucceeds(updateDoc(doc(admin, 'editions', E), { status: 'open' }))
-    await assertFails(updateDoc(doc(admin, 'editions', E), { status: 'bidon' }))
-    await assertSucceeds(setDoc(doc(admin, 'editionSecrets', E), { code: 'NOUVEAU' }))
   })
 })
 
@@ -364,9 +553,8 @@ describe('pseudos et profils', () => {
   })
 
   it('refuse un profil sans réservation du pseudo', async () => {
-    const bob = dbAs('bob')
     await assertFails(
-      setDoc(doc(bob, 'users', 'bob'), { displayName: 'Bob', displayNameLower: 'bob', emoji: '🦄', createdAt: serverTimestamp() }),
+      setDoc(doc(dbAs('bob'), 'users', 'bob'), { displayName: 'Bob', displayNameLower: 'bob', emoji: '🦄', createdAt: serverTimestamp() }),
     )
   })
 

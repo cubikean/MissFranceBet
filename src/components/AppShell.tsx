@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { NavLink, Outlet } from 'react-router'
-import { useIsAdmin } from '../lib'
+import { useIsSuperAdmin } from '../lib'
 import './AppShell.css'
 
 const icon = (path: ReactNode) => (
@@ -60,9 +60,9 @@ const ADMIN_TAB = {
   ),
 }
 
-/** Cadre des écrans connectés : contenu + barre d'onglets en bas (Admin si admin). */
+/** Cadre des écrans connectés : contenu + barre d'onglets en bas (Admin si super admin). */
 export function AppShell() {
-  const isAdmin = useIsAdmin().data
+  const isAdmin = useIsSuperAdmin().data
   const tabs = isAdmin ? [...TABS, ADMIN_TAB] : TABS
   return (
     <div className="shell">
