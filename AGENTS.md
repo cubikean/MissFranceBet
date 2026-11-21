@@ -48,6 +48,7 @@ Ne remets pas ces points en question sans l'accord du porteur du projet. Ajoute 
 | 2026-11-21 | Avatars = emojis (pas d'upload) | Pas de Storage, et c'est plus simple |
 | 2026-11-21 | Stack front : Vite + React + TypeScript strict + react-router + vite-plugin-pwa, CSS natif avec tokens | Compétences du porteur, aucune dépendance UI lourde |
 | 2026-11-21 | Direction visuelle "l'écharpe" (voir DESIGN.md) | L'écharpe bleu marine des photos officielles devient la signature de l'app |
+| 2026-11-21 | Domaine : **missfrancebet.web.app**. L'ID du projet Firebase (et du site Hosting) est `missfrancebet` ; `authDomain` vaut `missfrancebet.web.app` | Gratuit et immédiat ; choix du porteur |
 
 ## 4. Règles du jeu (résumé ; le détail est dans SPEC.md)
 
@@ -127,5 +128,5 @@ Règles de collaboration :
 
 ## 11. Questions ouvertes
 
-- Le domaine final : `<projet>.web.app` par défaut, ou un sous-domaine de `cubicom.fr` ?
+- Si l'ID `missfrancebet` est déjà pris chez Firebase, on garde un ID de projet différent et on crée un site Hosting supplémentaire nommé `missfrancebet` (ce qui est possible sur Spark).
 - L'identité visuelle finale reste à valider par le porteur sur les premiers écrans.
