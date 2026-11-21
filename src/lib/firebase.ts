@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app'
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import {
   connectFirestoreEmulator,
@@ -27,6 +28,21 @@ export const app = initializeApp({
   messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: env.VITE_FIREBASE_APP_ID,
 })
+
+// App Check (gratuit) : Firebase refuse les requêtes qui ne viennent pas de cette app (bots, scripts).
+// Actif seulement si VITE_RECAPTCHA_SITE_KEY est renseignée ; l'appliquer se fait ensuite dans la
+// console (App Check > Firestore > Appliquer). Désactivé avec les émulateurs.
+// En local contre le vrai projet : VITE_APPCHECK_DEBUG=true, puis enregistre le jeton de débogage
+// affiché dans la console du navigateur (console Firebase > App Check > Gérer les jetons de débogage).
+if (!usingEmulators && env.VITE_RECAPTCHA_SITE_KEY) {
+  if (env.VITE_APPCHECK_DEBUG === 'true') {
+    ;(self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true
+  }
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(env.VITE_RECAPTCHA_SITE_KEY),
+    isTokenAutoRefreshEnabled: true,
+  })
+}
 
 export const auth = getAuth(app)
 auth.languageCode = 'fr'

@@ -498,6 +498,53 @@ describe('transmission du rôle d’admin', () => {
   })
 })
 
+describe('changement du code d’invitation', () => {
+  /** Comme regenerateCode : nouveau code créé, ancien supprimé, party mise à jour. */
+  async function regen(db: Firestore, next: string, opts: { keepOld?: boolean; skipNew?: boolean } = {}) {
+    const b = writeBatch(db)
+    if (!opts.skipNew) b.set(doc(db, 'partyCodes', next), { partyId: P, editionId: E })
+    if (!opts.keepOld) b.delete(doc(db, 'partyCodes', CODE))
+    b.update(partyDoc(db), { code: next })
+    return b.commit()
+  }
+
+  it('laisse l’admin changer le code : l’ancien ne marche plus, le nouveau oui, les membres restent', async () => {
+    await assertSucceeds(regen(dbAs('olga'), 'NEWNEW'))
+    await assertFails(joinBatch(dbAs('carol'), 'carol', CODE))
+    await assertSucceeds(joinBatch(dbAs('carol'), 'carol', 'NEWNEW'))
+    await assertSucceeds(getDoc(partyDoc(dbAs('alice'))))
+  })
+
+  it('laisse le super admin changer le code', async () => {
+    await assertSucceeds(regen(dbAs('boss'), 'NEWNEW'))
+  })
+
+  it('refuse un changement de code par un simple membre ou l’admin d’une autre party', async () => {
+    await assertFails(regen(dbAs('alice'), 'NEWNEW'))
+    await assertFails(regen(dbAs('dan'), 'NEWNEW'))
+  })
+
+  it('refuse un changement de code incomplet ou vers un code pris', async () => {
+    await assertFails(regen(dbAs('olga'), 'NEWNEW', { keepOld: true }))
+    await assertFails(regen(dbAs('olga'), 'NEWNEW', { skipNew: true }))
+    await assertFails(regen(dbAs('olga'), CODE2))
+    await assertFails(regen(dbAs('olga'), 'mauvais'))
+  })
+
+  it('refuse de changer le code en même temps qu’autre chose', async () => {
+    const olga = dbAs('olga')
+    const b = writeBatch(olga)
+    b.set(doc(olga, 'partyCodes', 'NEWNEW'), { partyId: P, editionId: E })
+    b.delete(doc(olga, 'partyCodes', CODE))
+    b.update(partyDoc(olga), { code: 'NEWNEW', name: 'Autre nom' })
+    await assertFails(b.commit())
+  })
+
+  it('refuse de réserver un code pour la party d’un autre', async () => {
+    await assertFails(setDoc(doc(dbAs('dan'), 'partyCodes', 'NEWNEW'), { partyId: P, editionId: E }))
+  })
+})
+
 describe('suppression d’une party', () => {
   it('laisse l’admin supprimer sa party, son code et les adhésions', async () => {
     await assertSucceeds(deletePartyBatch(dbAs('olga')))

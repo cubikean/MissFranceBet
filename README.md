@@ -89,4 +89,6 @@ Tout est gratuit sur le plan Spark. Compte Google nécessaire.
 
 Pour les mises à jour suivantes : `npm run build && npx firebase deploy`.
 
+**Protection contre les bots (App Check, gratuit)** : dans la console Firebase > App Check, enregistre l'app web avec le fournisseur reCAPTCHA v3 (crée la clé sur https://www.google.com/recaptcha/admin, domaine `missfrancebet.web.app`). Mets la clé de site dans `VITE_RECAPTCHA_SITE_KEY` (`.env.local`), redéploie, vérifie que tout marche, puis dans App Check > API > Cloud Firestore, clique sur « Appliquer ». En local contre le vrai projet, mets `VITE_APPCHECK_DEBUG=true` et enregistre le jeton de débogage affiché dans la console du navigateur.
+
 **Après chaque soirée** : dans l'onglet Admin (super admin), clique sur « Télécharger une sauvegarde » et garde le fichier JSON. Le plan gratuit ne fait aucune sauvegarde automatique.

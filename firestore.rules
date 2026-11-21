@@ -161,23 +161,30 @@ service cloud.firestore {
       allow get: if signedIn();
       allow list: if false;
 
-      // Écrit uniquement à la création de la party, dans le même batch, par son créateur.
+      // Écrit dans le même batch que la party : à sa création (par son créateur), ou quand son
+      // admin change le code (régénération). Le code doit être celui de la party après écriture.
       allow create: if signedIn()
         && validCode(code)
         && exactKeys(request.resource.data, ['partyId', 'editionId'])
         && request.resource.data.partyId is string
-        && !exists(partyPath(request.resource.data.partyId))
         && getAfter(partyPath(request.resource.data.partyId)).data.code == code
-        && getAfter(partyPath(request.resource.data.partyId)).data.ownerUid == request.auth.uid
-        && getAfter(partyPath(request.resource.data.partyId)).data.editionId == request.resource.data.editionId;
+        && getAfter(partyPath(request.resource.data.partyId)).data.editionId == request.resource.data.editionId
+        && (
+          (!exists(partyPath(request.resource.data.partyId))
+            && getAfter(partyPath(request.resource.data.partyId)).data.ownerUid == request.auth.uid)
+          || (exists(partyPath(request.resource.data.partyId))
+            && canManage(request.resource.data.partyId)
+            && partyData(request.resource.data.partyId).code != code)
+        );
 
       allow update: if false;
 
-      // Libéré quand la party est supprimée (même batch), par son admin ; ou par le super admin.
+      // Libéré, dans le même batch, quand la party est supprimée ou que son code change ;
+      // par son admin ou le super admin.
       allow delete: if isSuperAdmin()
-        || (signedIn()
-          && get(partyPath(resource.data.partyId)).data.ownerUid == request.auth.uid
-          && !existsAfter(partyPath(resource.data.partyId)));
+        || (canManage(resource.data.partyId)
+          && (!existsAfter(partyPath(resource.data.partyId))
+            || getAfter(partyPath(resource.data.partyId)).data.code != code));
     }
 
     // Requête collection group « mes adhésions » (members où uid == moi).
@@ -208,6 +215,14 @@ service cloud.firestore {
       // Admin de la party ou super admin : renommer, changer de phase, transmettre le rôle d'admin.
       // Changer de phase ou d'admin (jamais les deux à la fois) incrémente eventCount et écrit
       // events/{n} dans le même batch. Le nouvel admin doit être membre.
+      // Changer de code : seul champ modifié, le nouveau partyCodes/{code} est créé et l'ancien
+      // supprimé dans le même batch (l'ancien lien d'invitation cesse de marcher).
+      allow update: if canManage(p)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['code'])
+        && validCode(request.resource.data.code)
+        && getAfter(/databases/$(database)/documents/partyCodes/$(request.resource.data.code)).data.partyId == p
+        && !existsAfter(/databases/$(database)/documents/partyCodes/$(resource.data.code));
+
       allow update: if canManage(p)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'status', 'ownerUid', 'eventCount'])
         && validPartyName(request.resource.data.name)

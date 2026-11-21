@@ -82,6 +82,7 @@ Administration (`admin.ts`) — admin de la party ou super admin, sauf mention
 - `setPartyStatus(party: Party, status)` — batch party + events/{n} (type 'status')
 - `transferOwnership(party: Party, newOwnerUid)` — batch party + events/{n} (type 'owner') ; le nouvel admin doit être membre
 - `renameParty(partyId, name)`, `removeMember(partyId, uid)`, `setResults(partyId, patch)` (fusion, `null` efface)
+- `regenerateCode(party): Promise<code>` — nouveau partyCodes + suppression de l'ancien + party.code, en un batch ; l'ancien lien cesse de marcher
 - `leaveParty(party)` — n'importe quel membre sauf l'admin ; réinitialise la party active. **L'interface confirme d'abord (popup)**
 - `deleteParty(party, typedPhrase)` — refuse si `deletePhraseMatches(typedPhrase)` est faux ; batch adhésions + code + party. `DELETE_PARTY_PHRASE` = « je confirme la suppression de la party » (champ à recopier, bouton désactivé tant que ça ne correspond pas)
 - `exportBackup(): Promise<object>`, `downloadBackup()` — super admin : fichier JSON de sauvegarde
@@ -90,10 +91,10 @@ Erreurs (`errors.ts`) : `errorMessage(err): string` (français, prêt à affiche
 
 ## Garanties des règles (firestore.rules)
 
-Chaque point est couvert par `tests/rules/firestore.test.ts` (72 tests, vérifiés aussi par mutation : casser une règle fait échouer un test).
+Chaque point est couvert par `tests/rules/firestore.test.ts` (78 tests, vérifiés aussi par mutation : casser une règle fait échouer un test).
 
 - Création de party : le créateur est `ownerUid`, statut `open`, `eventCount == 0`, `createdAt == request.time`, code au bon format, `partyCodes/{code}` réservé dans le même batch (create échoue si le code existe), adhésion du créateur dans le même batch. Impossible d'ajouter un second code à une party existante.
-- `partyCodes` : get pour tout connecté, list interdit, ni update ni delete (sauf super admin).
+- `partyCodes` : get pour tout connecté, list interdit, jamais modifié. Créé dans le batch de création de la party ou de changement de code ; supprimé dans le batch de suppression de la party ou de changement de code (par l'admin ou le super admin). Changer le code : seul champ modifié de la party, nouveau code créé et ancien supprimé dans le même batch.
 - Rejoindre : `members/{uid}` ne se crée que par soi-même, avec `editionId` égal à celui de la party, `hasPicked == false`, et soit en créant la party, soit avec `joinProofs/{uid}` (même batch) dont le code égale celui de la party. La preuve est illisible par tous.
 - Lecture d'une party et de ses membres : membres et super admin. Liste de toutes les parties : super admin. Collection group `members` : seulement ses propres adhésions (`uid == moi`).
 - Phases et transmission : admin de la party ou super admin ; changer de statut **ou** d'admin (jamais les deux) incrémente `eventCount` et exige `events/{n}` dans le même batch (type, from = ancienne valeur, to = nouvelle, by = moi, at = request.time). Le nouvel admin doit être membre. Journal immuable, lisible des membres. `code`, `editionId`, `createdAt` immuables.
@@ -107,6 +108,8 @@ Chaque point est couvert par `tests/rules/firestore.test.ts` (72 tests, vérifi�
 - Pseudos : `usernames/{lower}` créé seulement si `users/{uid}.displayNameLower` correspond après écriture ; jamais mis à jour ; libéré uniquement par son propriétaire en changeant de pseudo. `users` modifiable par son propriétaire seulement.
 
 ## Conventions
+
+- Interface : skill `ui-ux-pro-max` (`.claude/skills/ui-ux-pro-max/`) comme référence UX et accessibilité, par exemple `python .claude/skills/ui-ux-pro-max/scripts/search.py "<besoin>" --domain ux`. `docs/DESIGN.md` prime.
 
 - Textes en français, tutoiement, casse normale ; capitales uniquement dans `<Sash>`.
 - CSS natif : uniquement les variables de `tokens.css`, un fichier CSS à côté du composant. Pas de framework UI.
@@ -124,7 +127,7 @@ Chaque point est couvert par `tests/rules/firestore.test.ts` (72 tests, vérifi�
 - Tous les écrans métier (pages provisoires dans `src/pages/index.tsx`), bandeau « Installer l'app », animation orchestrée des écharpes et confettis.
 - `/connexion` doit renvoyer vers `state.from` après connexion (pour que le lien `/rejoindre/<code>` marche sans compte).
 - Bundle de 900 kB (Firebase) : découper par route avec `React.lazy` si besoin.
-- **Firebase App Check** (gratuit, reCAPTCHA) à activer avant la mise en ligne : un bot qui teste des codes ne peut pas en deviner un (31^6 ≈ 887 millions), mais il peut épuiser le quota gratuit de 50 000 lectures par jour.
+- **Firebase App Check** : le code est prêt (`src/lib/firebase.ts`, actif si `VITE_RECAPTCHA_SITE_KEY` est fournie). Reste, avant la mise en ligne, à créer la clé reCAPTCHA v3, à l'enregistrer dans la console et à **appliquer** App Check à Firestore. Pourquoi : un bot qui teste des codes ne peut pas en deviner un (31^6 ≈ 887 millions), mais il peut épuiser le quota gratuit de 50 000 lectures par jour.
 - Le Sash n'a été vérifié que par typecheck/build, pas visuellement dans un navigateur.
 - `useMyParties` et `useMyTrophies` ouvrent un abonnement par party : sans souci pour quelques parties par joueur.
 - Tests de règles sous Windows : JDK 21 requis (firebase-tools), et lancer vitest depuis un chemin `C:\` en majuscule (sinon vitest se charge deux fois et plante sur `reading 'config'`).

@@ -64,6 +64,8 @@ Ne remets pas ces points en question sans l'accord du porteur du projet. Ajoute 
 | 2026-11-21 | Le porteur prépare lui-même, en amont, les données de chaque nouvelle édition | Choix du porteur |
 | 2026-11-21 | Inscription ouverte à tout compte : sans code, on ne voit aucune party | Choix du porteur |
 | 2026-11-21 | Emailing propre (mot de passe oublié hors spam) : plus tard, selon l'avancement | Un plus, pas un prérequis |
+| 2026-11-21 | **Pas de validation des membres** par l'admin ; à la place, l'admin peut **changer le code** (l'ancien lien cesse de marcher) et **Firebase App Check** (gratuit) bloque les bots | Deviner un code est irréaliste (31^6 ≈ 887 millions) ; le vrai risque d'un bot est d'épuiser le quota gratuit. Aucune friction pour les joueurs |
+| 2026-11-21 | Skill de design **UI UX Pro Max** installée dans `.claude/skills/ui-ux-pro-max/` (MIT, nextlevelbuilder) pour les agents qui font de l'interface | Demande du porteur |
 
 ## 4. Règles du jeu (résumé ; le détail est dans SPEC.md)
 
@@ -123,6 +125,7 @@ On navigue avec une barre d'onglets en bas : Accueil, Candidates, Soirée, Profi
 Règles de collaboration :
 - **La couche `src/lib` est le contrat** entre les agents. Les écrans ne parlent jamais à Firestore directement : ils passent par les hooks et fonctions de `src/lib`. S'il manque une fonction, on l'ajoute dans `src/lib` avec ses types, sans contourner le contrat.
 - Le composant `Sash` (l'écharpe) est partagé : on ne le duplique pas.
+- Pour tout travail d'interface, utiliser la skill **`ui-ux-pro-max`** (`.claude/skills/ui-ux-pro-max/`, script `scripts/search.py`) comme référence UX et accessibilité. Ses résultats sont des **recommandations** : `docs/DESIGN.md` et les décisions de ce fichier priment toujours (par exemple, la direction "l'écharpe", les tokens existants et les avatars emoji, qui sont un contenu choisi par le joueur et non des icônes). On ne lance pas son mode qui persiste un design system dans le dépôt sans l'accord du porteur.
 - Les agents ne committent pas eux-mêmes, sauf consigne explicite : c'est le chef de projet qui intègre.
 
 ## 9. Roadmap
@@ -148,8 +151,9 @@ Règles de collaboration :
 **Jalon J1 Fondations terminé sur la branche `wip/fondations` (pas encore fusionnée dans `dev`) :**
 - Scaffold Vite/React/TS/PWA, `firebase.json`, `.firebaserc` (missfrancebet), le composant `Sash`, des pages placeholder pour toutes les routes, le README avec la mise en ligne pas à pas
 - **Modèle par party** (décisions du 21/11) : `src/lib` (le contrat, API dans `docs/ARCHITECTURE.md`), `firestore.rules`, `firestore.indexes.json`, `src/data/editions/2027/edition.json`
-- Quitter, transmettre le rôle d'admin, supprimer une party (double confirmation), sauvegarde JSON super admin
-- `typecheck`, `lint` et `build` passent ; 7/7 tests unitaires ; **72/72 tests des règles sur l'émulateur**, contrôlés par mutation (casser une règle fait échouer un test)
+- Quitter, transmettre le rôle d'admin, supprimer une party (double confirmation), changer le code d'invitation, sauvegarde JSON super admin, App Check (activé dès qu'une clé reCAPTCHA est fournie)
+- Skill de design `ui-ux-pro-max` installée pour les agents d'interface
+- `typecheck`, `lint` et `build` passent ; 7/7 tests unitaires ; **78/78 tests des règles sur l'émulateur**, contrôlés par mutation (casser une règle fait échouer un test)
 - Sous Windows : JDK 21 requis pour l'émulateur, et vitest à lancer depuis un chemin `C:\` en majuscule (voir ARCHITECTURE.md)
 - Limites connues : voir "Reste à faire" dans `docs/ARCHITECTURE.md` (écrans à construire, retour après connexion pour les liens d'invitation, bundle de 900 kB, `Sash` jamais vu dans un navigateur)
 
@@ -173,5 +177,4 @@ Il faut aussi que quelqu'un d'autre que le porteur ait accès au projet Firebase
 
 - Si l'ID `missfrancebet` est déjà pris chez Firebase, on garde un ID de projet différent et on crée un site Hosting supplémentaire nommé `missfrancebet` (ce qui est possible sur Spark).
 - L'identité visuelle finale reste à valider par le porteur sur les premiers écrans.
-- Ajouter une validation des membres par l'admin, ou une régénération du code d'invitation ? (question en cours)
 - Date et heure exactes de l'émission 2027 (21h10 provisoire) : à reconfirmer par le porteur.

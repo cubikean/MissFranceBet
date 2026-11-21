@@ -16,9 +16,9 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { requireUid, useAuth } from './auth'
-import { AppError } from './errors'
+import { AppError, isPermissionDenied } from './errors'
 import { toDate, useSnapshot } from './live'
-import { PARTY_NAME_MAX, PARTY_NAME_MIN, setActivePartyId } from './parties'
+import { generateCode, PARTY_NAME_MAX, PARTY_NAME_MIN, setActivePartyId } from './parties'
 import type { Live, Party, PartyStatus, Results } from './types'
 
 /** true si admins/{uid} existe : super admin (document créé à la main dans la console). */
@@ -70,6 +70,30 @@ export async function transferOwnership(party: Party, newOwnerUid: string): Prom
     at: serverTimestamp(),
   })
   await batch.commit()
+}
+
+/**
+ * Change le code d'invitation : l'ancien code et l'ancien lien cessent aussitôt de marcher, les
+ * membres actuels restent. Un batch : nouveau partyCodes/{code} + suppression de l'ancien + party.
+ * Renvoie le nouveau code. Réessaie en cas de collision.
+ */
+export async function regenerateCode(party: Party): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateCode()
+    if (code === party.code) continue
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'partyCodes', code), { partyId: party.id, editionId: party.editionId })
+    batch.delete(doc(db, 'partyCodes', party.code))
+    batch.update(doc(db, 'parties', party.id), { code })
+    try {
+      await batch.commit()
+      return code
+    } catch (error) {
+      // Refus = code déjà pris (très improbable) : on en tire un autre.
+      if (!isPermissionDenied(error)) throw error
+    }
+  }
+  throw new AppError('party-invalid', 'Impossible de changer le code. Réessaie dans un instant.')
 }
 
 /** Renomme la party. */

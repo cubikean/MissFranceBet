@@ -27,6 +27,8 @@ Seuls l'admin de la party et le super admin changent de phase. Le retour en arri
 - **Transmettre le rôle d'admin** : l'admin (ou le super admin) désigne un autre membre comme admin. C'est journalisé (« Olga a passé la main à Alice »). L'ancien admin reste membre, sans droits d'admin.
 - **Supprimer la party** : l'admin (ou le super admin), avec une **double confirmation à la GitHub** : une fenêtre explique les conséquences (tous les membres perdent l'accès, les trophées de cette party disparaissent, c'est définitif) et demande de recopier la phrase `je confirme la suppression de la party` dans un champ ; le bouton reste désactivé tant que la phrase ne correspond pas (majuscules et espaces en trop tolérés). La party, son code et toutes les adhésions sont supprimés ensemble.
 - **Retirer un membre** : l'admin (ou le super admin), avec une popup de confirmation. L'admin ne peut pas être retiré.
+- **Changer le code** : l'admin (ou le super admin) génère un nouveau code, avec une popup de confirmation. L'ancien code et l'ancien lien cessent aussitôt de marcher ; les membres actuels restent. À utiliser si un lien a fuité.
+- **Pas de validation des membres** : avoir le code suffit pour entrer. Contre les bots, Firebase App Check refuse les requêtes qui ne viennent pas de l'app.
 - **Sauvegarde** : le super admin télécharge en un clic, depuis `/admin`, un fichier JSON avec les profils et, pour chaque party, les membres, le journal, les résultats, et les pronos et historiques si elle est fermée. À faire après chaque soirée.
 
 ## Comptes
@@ -46,7 +48,7 @@ Seuls l'admin de la party et le super admin changent de phase. Le retour en arri
 | `/candidates` | Grille des candidates de l'édition, ma candidate (dans la party active) mise en avant, statut en course ou éliminée une fois les pronos fermés |
 | `/candidates/:id` | Fiche (photo en pied, âge, taille, origine, profession, passions, Instagram) et bouton "Choisir Miss <Région>" (désactivé si fermé ou sans party) |
 | `/soiree` | Party active. Avant la fermeture : le nombre de joueurs ayant pronostiqué (sans dire qui a choisi quoi) et le code d'invitation à partager. Après : le prono de chaque joueur sous forme d'écharpe, le statut en direct, le nombre de changements d'avis et l'historique dépliable ; puis le podium et les trophées. Le journal des phases. Bouton « Gérer la party » si j'en suis l'admin |
-| `/soiree/gestion` | Admin de la party active (ou super admin) : renommer, changer de phase (fermer, rouvrir, terminer), saisir top 15 / top 5 / podium, retirer un membre, **transmettre le rôle d'admin**, code d'invitation à partager, **supprimer la party** (double confirmation, phrase à recopier) |
+| `/soiree/gestion` | Admin de la party active (ou super admin) : renommer, changer de phase (fermer, rouvrir, terminer), saisir top 15 / top 5 / podium, retirer un membre, **transmettre le rôle d'admin**, code d'invitation à partager et **changer le code**, **supprimer la party** (double confirmation, phrase à recopier) |
 | `/profil` | Pseudo, emoji (modifiables), mes trophées de toutes les parties et éditions, déconnexion |
 | `/admin` | Super admin uniquement : liste de toutes les parties (édition, nom, admin, nombre de membres, phase), accès à la gestion de n'importe laquelle, bouton **« Télécharger une sauvegarde »** |
 | — | Bandeau "Installer l'app" : un tuto en 3 étapes sur iOS Safari (Partager → Sur l'écran d'accueil), le prompt natif sur Android |
