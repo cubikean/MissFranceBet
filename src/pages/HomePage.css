@@ -1,0 +1,49 @@
+.home__header {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.home__date {
+  font-weight: var(--weight-semibold);
+}
+
+.home__countdown {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-title);
+}
+
+.home__party {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: var(--space-4);
+}
+
+.home__party p {
+  overflow-wrap: anywhere;
+}
+
+.home__pick {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.home__pick-name {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-title);
+}
+
+.home__status {
+  font-weight: var(--weight-semibold);
+}
+
+.home__cta {
+  justify-self: start;
+}
