@@ -12,6 +12,32 @@
   justify-self: start;
 }
 
+/* Bouton flottant « Gérer la party » (admin de la party ou super admin), au-dessus des onglets. */
+.soiree__fab {
+  position: fixed;
+  right: max(var(--space-4), calc((100vw - 40rem) / 2 + var(--space-4)));
+  bottom: calc(var(--tabbar-height) + var(--safe-bottom) + var(--space-4));
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--color-echarpe);
+  color: var(--color-on-dark);
+  box-shadow: 0 4px 14px rgb(29 43 120 / 0.35);
+  transition: transform var(--duration-fast) ease;
+}
+
+.soiree__fab:active {
+  transform: scale(0.94);
+}
+
+/* Place réservée sous le contenu pour que le bouton flottant ne cache rien. */
+.soiree--with-fab {
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + var(--space-6) + 56px + var(--space-4));
+}
+
 .soiree__picks-head {
   display: flex;
   flex-wrap: wrap;
