@@ -54,10 +54,8 @@ export function ProfilePage() {
   return <Placeholder title="Profil" route="/profil" />
 }
 
-/** Gestion de la party active : réservée à son créateur ou au super admin (canManageParty). */
-export function PartyAdminPage() {
-  return <Placeholder title="Gérer la party" route="/soiree/gestion" />
-}
+/** Gestion de la party active : réservée à son admin ou au super admin (canManageParty). */
+export { PartyAdminPage } from './PartyAdminPage'
 
 /** Super admin : toutes les parties. */
 export function AdminPage() {
