@@ -19,6 +19,7 @@ src/
   components/Sash.tsx      l'écharpe (élément signature)
   components/AppShell.tsx  barre d'onglets du bas (+ Admin si super admin)
   components/guards.tsx    RequireAuth, RequireProfile, RequireSuperAdmin
+  components/ConfirmDialog.tsx  fenêtre de confirmation partagée (<dialog> natif ; requirePhrase pour la double confirmation)
   pages/index.tsx          pages provisoires (une par route) à remplacer
   lib/                     couche données (contrat), import depuis '../lib'
   data/editions/2027/edition.json     titre + date de l'émission
@@ -61,6 +62,7 @@ Parties (`parties.ts`)
 - `useMembership(partyId): Live<Membership | null>` (moi), `useMembers(partyId): Live<Membership[]>`
 - `usePartyEvents(partyId): Live<PartyEvent[]>` (journal des phases)
 - `useAllParties(enabled): Live<Party[]>` (super admin : passer `useIsSuperAdmin().data`)
+- `useActiveParty(): Live<Party | null>` : **point d'entrée des onglets** (party active de l'édition en cours, sinon la plus récente ; null = aucune party → proposer `/parties`)
 - `useActivePartyId(): string | null`, `setActivePartyId(id | null)` (localStorage, par appareil)
 - `canManageParty(party, uid, isSuperAdmin): boolean`
 - `normalizeCode`, `isValidCode`, `generateCode`, `CODE_ALPHABET`, `CODE_LENGTH`, `PARTY_NAME_MIN/MAX`, `PARTY_STATUSES`

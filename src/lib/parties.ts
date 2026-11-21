@@ -19,7 +19,7 @@ import { db } from './firebase'
 import { requireUid, useAuth } from './auth'
 import { AppError, isPermissionDenied } from './errors'
 import { toDate, useSnapshot } from './live'
-import { getEdition } from './editions'
+import { currentEdition, getEdition } from './editions'
 import type { Live, Membership, Party, PartyEvent, PartyStatus } from './types'
 
 // ---------- Code d'invitation ----------
@@ -362,3 +362,15 @@ export function canManageParty(party: Party | null, uid: string | null | undefin
 
 /** Transitions de phase autorisées (le retour en arrière est permis et journalisé). */
 export const PARTY_STATUSES: PartyStatus[] = ['open', 'closed', 'finished']
+
+/**
+ * Party active de l'édition en cours : celle mémorisée sur l'appareil si j'en suis encore membre,
+ * sinon la plus récente. data = null si je n'ai aucune party cette année (proposer /parties).
+ * C'est le point d'entrée des onglets Accueil, Candidates et Soirée.
+ */
+export function useActiveParty(): Live<Party | null> {
+  const activeId = useActivePartyId()
+  const parties = useMyParties(currentEdition()?.id ?? null)
+  const party = parties.data.find((p) => p.id === activeId) ?? parties.data[0] ?? null
+  return { data: party, loading: parties.loading, error: parties.error }
+}
