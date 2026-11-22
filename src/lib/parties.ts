@@ -38,6 +38,19 @@ export function isValidCode(code: string): boolean {
   return new RegExp(`^[${CODE_ALPHABET}]{${CODE_LENGTH}}$`).test(code)
 }
 
+/**
+ * Message d'erreur pour un code saisi (normalisé ou non), null s'il a le bon format.
+ * 0/O et 1/I/L n'existent pas dans les codes : on le dit plutôt que de deviner.
+ */
+export function codeError(raw: string): string | null {
+  const code = normalizeCode(raw)
+  if (isValidCode(code)) return null
+  if (/[0O1IL]/.test(code)) {
+    return "Les codes n'utilisent jamais 0, O, 1, I ni L. Vérifie le code auprès de l'organisateur."
+  }
+  return `Le code fait ${CODE_LENGTH}\u00a0caractères (lettres et chiffres). Vérifie-le auprès de l'organisateur.`
+}
+
 /** Code aléatoire (crypto), ex. "K7QMZ3". */
 export function generateCode(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH))
@@ -180,9 +193,71 @@ export function useMyMemberships(): Live<Membership[]> {
   )
 }
 
+// ---------- Party perdue (retrait, suppression) ----------
+
+/** Message neutre affiché quand une de mes parties disparaît sans que je l'aie quittée. */
+export interface PartyNotice {
+  partyId: string
+  message: string
+}
+
+let notice: PartyNotice | null = null
+const noticeListeners = new Set<() => void>()
+/** Parties déjà signalées, ou que je quitte / supprime moi-même : pas de message. */
+const announced = new Set<string>()
+
+function announceLost(party: Party, deleted: boolean): void {
+  if (announced.has(party.id)) return
+  announced.add(party.id)
+  notice = {
+    partyId: party.id,
+    message: deleted
+      ? `La party «\u00a0${party.name}\u00a0» a été supprimée.`
+      : `Tu ne fais plus partie de la party «\u00a0${party.name}\u00a0».`,
+  }
+  noticeListeners.forEach((l) => l())
+}
+
+/**
+ * À appeler juste avant de quitter ou de supprimer soi-même une party : pas de message.
+ * `expected = false` annule (l'écriture a échoué).
+ */
+export function expectPartyExit(partyId: string, expected = true): void {
+  if (expected) announced.add(partyId)
+  else announced.delete(partyId)
+}
+
+/** Dernière party perdue (retrait par l'admin, suppression), à afficher une fois puis effacer. */
+export function usePartyNotice(): PartyNotice | null {
+  return useSyncExternalStore(
+    (l) => {
+      noticeListeners.add(l)
+      return () => noticeListeners.delete(l)
+    },
+    () => notice,
+    () => null,
+  )
+}
+
+export function clearPartyNotice(): void {
+  notice = null
+  noticeListeners.forEach((l) => l())
+}
+
 /**
  * Mes parties (filtrées sur une édition si editionId est donné), les plus récentes d'abord.
  * Combine mes adhésions et un abonnement à chaque party.
+ *
+ * Une party devenue inaccessible (je suis retiré, elle est supprimée : mon adhésion disparaît,
+ * refus des règles, document absent ou `status == 'deleted'`) sort simplement de la liste, avec un
+ * message neutre (usePartyNotice) : jamais d'erreur pour toute la liste. Une adhésion pas encore
+ * confirmée par le serveur (juste après une création ou une adhésion) attend sa confirmation avant
+ * qu'on lise la party, sinon les règles refuseraient la lecture.
+ *
+ * Pourquoi un écouteur sur ma propre adhésion : Firestore ne réévalue pas les règles d'un écouteur
+ * déjà ouvert quand un autre document change. Après un retrait, l'écouteur de la party et la requête
+ * collection group peuvent continuer de servir l'ancien état ; members/{moi} (lisible par moi même
+ * absent) reçoit, lui, la suppression.
  */
 export function useMyParties(editionId?: string | null): Live<Party[]> {
   const { user } = useAuth()
@@ -191,53 +266,105 @@ export function useMyParties(editionId?: string | null): Live<Party[]> {
     (next, fail) => {
       const parties = new Map<string, Party>()
       const inner = new Map<string, () => void>()
-      let ready = false
+      /** Abonnements sans première réponse : on attend avant d'émettre. */
+      const waiting = new Set<string>()
+      /** Parties refusées par les règles : un seul nouvel essai, à la prochaine adhésion confirmée. */
+      const refused = new Map<string, number>()
+      /**
+       * Parties perdues (supprimées, adhésion retirée) alors que la requête des adhésions les liste
+       * encore : on ne les relit pas, sauf si l'adhésion change (je reviens avec le code).
+       * Valeur : joinedAt (ms) de l'adhésion au moment de la perte.
+       */
+      const gone = new Map<string, number | null>()
+      /** joinedAt (ms) de chaque adhésion listée. */
+      const joinedAt = new Map<string, number | null>()
+      let outerReady = false
+
       const emit = () => {
-        if (!ready) return
+        if (!outerReady || waiting.size > 0) return
         next(
           [...parties.values()]
             .filter((p) => !editionId || p.editionId === editionId)
             .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)),
         )
       }
+      const drop = (id: string, lost: 'removed' | 'deleted') => {
+        inner.get(id)?.()
+        inner.delete(id)
+        waiting.delete(id)
+        const party = parties.get(id)
+        parties.delete(id)
+        if (party) announceLost(party, lost === 'deleted')
+      }
+      const lose = (id: string, lost: 'removed' | 'deleted') => {
+        gone.set(id, joinedAt.get(id) ?? null)
+        drop(id, lost)
+        emit()
+      }
+      const watch = (id: string) => {
+        waiting.add(id)
+        const party = onSnapshot(
+          doc(db, 'parties', id),
+          (p) => {
+            const d = p.exists() ? p.data({ serverTimestamps: 'estimate' }) : null
+            if (!d || d.status === 'deleted') return lose(id, 'deleted')
+            if (!parties.has(id)) announced.delete(id) // (re)vue : un futur retrait sera signalé
+            parties.set(id, toParty(id, d))
+            waiting.delete(id)
+            emit()
+          },
+          (error) => {
+            if (!isPermissionDenied(error)) {
+              fail(error)
+              return
+            }
+            refused.set(id, (refused.get(id) ?? 0) + 1)
+            drop(id, 'removed')
+            emit()
+          },
+        )
+        const membership = onSnapshot(
+          doc(db, 'parties', id, 'members', user!.uid),
+          { includeMetadataChanges: true },
+          (m) => {
+            // Seule une absence confirmée par le serveur compte (pas le cache, pas une écriture locale).
+            if (m.exists() || m.metadata.fromCache || m.metadata.hasPendingWrites) return
+            lose(id, 'removed')
+          },
+          () => undefined, // l'écouteur de la party signale déjà les refus
+        )
+        inner.set(id, () => {
+          party()
+          membership()
+        })
+      }
+
       const outer = onSnapshot(
         query(collectionGroup(db, 'members'), where('uid', '==', user!.uid)),
+        // Métadonnées : on est prévenu quand une adhésion locale est confirmée par le serveur.
+        { includeMetadataChanges: true },
         (s) => {
-          const ids = new Set(
-            s.docs
-              .filter((d) => !editionId || d.data().editionId === editionId)
-              .map((d) => d.ref.parent.parent!.id),
-          )
-          for (const [id, unsub] of inner) {
-            if (!ids.has(id)) {
-              unsub()
-              inner.delete(id)
-              parties.delete(id)
-            }
+          const ids = new Set<string>()
+          const confirmed = new Set<string>()
+          joinedAt.clear()
+          for (const d of s.docs) {
+            const data = d.data()
+            if (editionId && data.editionId !== editionId) continue
+            const id = d.ref.parent.parent!.id
+            ids.add(id)
+            joinedAt.set(id, toDate(data.joinedAt)?.getTime() ?? null)
+            if (!d.metadata.hasPendingWrites) confirmed.add(id)
           }
-          let pending = [...ids].filter((id) => !inner.has(id)).length
-          ready = pending === 0
+          for (const id of [...inner.keys()]) if (!ids.has(id)) drop(id, 'removed')
+          for (const id of [...refused.keys()]) if (!ids.has(id)) refused.delete(id)
+          // Nouvelle adhésion (je reviens) : la party perdue peut être relue.
+          for (const [id, at] of [...gone]) if (!ids.has(id) || joinedAt.get(id) !== at) gone.delete(id)
           for (const id of ids) {
-            if (inner.has(id)) continue
-            let first = true
-            inner.set(
-              id,
-              onSnapshot(
-                doc(db, 'parties', id),
-                (p) => {
-                  if (p.exists()) parties.set(id, toParty(id, p.data({ serverTimestamps: 'estimate' })))
-                  else parties.delete(id)
-                  if (first) {
-                    first = false
-                    pending -= 1
-                    if (pending === 0) ready = true
-                  }
-                  emit()
-                },
-                fail,
-              ),
-            )
+            if (inner.has(id) || gone.has(id) || !confirmed.has(id)) continue
+            if ((refused.get(id) ?? 0) >= 2) continue
+            watch(id)
           }
+          outerReady = true
           emit()
         },
         fail,

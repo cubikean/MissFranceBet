@@ -23,3 +23,35 @@
     transform: translateY(12px);
   }
 }
+
+/* Toast avec une action (« Mettre à jour ») : en haut, pour ne pas croiser les toasts du bas. */
+.toast-region--top {
+  inset: calc(env(safe-area-inset-top, 0px) + var(--space-3)) var(--space-4) auto;
+  z-index: 30;
+}
+
+.toast--action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-radius: var(--radius-sheet);
+  pointer-events: auto;
+}
+
+.toast__button {
+  flex: none;
+  min-height: var(--tap-target);
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-echarpe);
+  font-weight: 700;
+}
+
+.toast__button:disabled {
+  opacity: 0.7;
+}

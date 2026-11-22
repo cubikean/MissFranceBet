@@ -8,6 +8,7 @@ import {
   where,
   writeBatch,
   type DocumentData,
+  type DocumentReference,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { requireUid, useAuth } from './auth'
@@ -28,7 +29,8 @@ function toHistory(id: string, d: DocumentData): PickHistoryEntry {
  * Choisit (ou change) ma candidate dans la party. Un seul batch atomique :
  * picks/{uid} (changeCount + 1, updatedAt serveur) + pickHistory/{uid}_{n} + members/{uid}.hasPicked.
  * Sans effet si c'est déjà ma candidate. Lève AppError('unknown-candidate') si la candidate
- * n'appartient pas à l'édition de la party, AppError('picks-closed') si les règles refusent.
+ * n'appartient pas à l'édition de la party ; si les règles refusent, AppError('picks-closed'),
+ * 'not-member' (retiré, party supprimée) ou 'pick-conflict' (changé sur un autre appareil).
  */
 export async function setPick(party: Party, candidateId: string): Promise<{ changeCount: number }> {
   const uid = requireUid()
@@ -56,12 +58,34 @@ export async function setPick(party: Party, candidateId: string): Promise<{ chan
   try {
     await batch.commit()
   } catch (error) {
-    if (isPermissionDenied(error)) {
-      throw new AppError('picks-closed', "Ton choix n'a pas été enregistré : les pronos sont fermés.")
-    }
+    if (isPermissionDenied(error)) throw await explainRefusal(party.id, pickRef, n - 1)
     throw error
   }
   return { changeCount: n }
+}
+
+/**
+ * Pourquoi les règles ont refusé le prono : on relit la party et mon prono sur le serveur.
+ * Pronos fermés, party supprimée ou quittée (retrait), ou prono changé entre-temps sur un autre
+ * appareil (le compteur ne suit plus).
+ */
+async function explainRefusal(partyId: string, pickRef: DocumentReference, expectedCount: number): Promise<AppError> {
+  const notSaved = "Ton choix n'a pas été enregistré"
+  try {
+    const party = await getDocFromServer(doc(db, 'parties', partyId))
+    if (!party.exists() || party.data().status === 'deleted') {
+      return new AppError('not-member', `${notSaved}\u00a0: cette party a été supprimée.`)
+    }
+    if (party.data().status !== 'open') return new AppError('picks-closed', `${notSaved}\u00a0: les pronos sont fermés.`)
+    const mine = await getDocFromServer(pickRef)
+    const count = mine.exists() ? (mine.data().changeCount as number) : 0
+    if (count !== expectedCount) {
+      return new AppError('pick-conflict', `${notSaved}\u00a0: ton prono vient de changer sur un autre appareil. Vérifie-le et réessaie.`)
+    }
+  } catch (e) {
+    if (isPermissionDenied(e)) return new AppError('not-member', `${notSaved}\u00a0: tu ne fais plus partie de cette party.`)
+  }
+  return new AppError('picks-closed', `${notSaved}. Réessaie dans un instant.`)
 }
 
 /** Mon prono dans la party (null si pas encore choisi). */

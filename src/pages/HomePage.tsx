@@ -7,6 +7,7 @@ import {
   currentEdition,
   errorMessage,
   getCandidate,
+  SHOW_DURATION_MS,
   trophyFor,
   useActiveParty,
   useMyPick,
@@ -17,8 +18,6 @@ import '../styles/ui.css'
 import './HomePage.css'
 
 const DAY = 24 * 60 * 60 * 1000
-/** Durée approximative de l'émission, pour afficher « En direct » pendant la soirée. */
-const SHOW_LENGTH = 4 * 60 * 60 * 1000
 
 function showDate(date: Date): string {
   const day = date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -32,7 +31,7 @@ function Countdown({ edition }: { edition: Edition }) {
   const remaining = edition.showAt.getTime() - now.getTime()
 
   if (remaining <= 0) {
-    if (-remaining < SHOW_LENGTH) return <p className="live-badge">En direct sur TF1</p>
+    if (-remaining < SHOW_DURATION_MS) return <p className="live-badge">En direct sur TF1</p>
     return <p className="muted">L'émission est passée.</p>
   }
   if (remaining >= DAY) {
@@ -68,6 +67,8 @@ export function HomePage() {
   const results = useResults(party && party.status !== 'open' ? party.id : null)
 
   const candidate = party && myPick.data ? getCandidate(party.editionId, myPick.data.candidateId) : null
+  // Prono enregistré sur un id absent des données embarquées (candidate retirée, données corrigées).
+  const unknownPick = !!myPick.data && !candidate
   const status = candidate ? candidateStatus(candidate.id, party, results.data) : 'neutral'
   const trophy = party?.status === 'finished' ? trophyFor(myPick.data, results.data) : null
 
@@ -94,7 +95,7 @@ export function HomePage() {
       ) : !party ? (
         <div className="card">
           <h2 className="section-title">Crée ta party ou rejoins celle de tes amis</h2>
-          <p>Une party, c'est ton groupe d'amis : chacun choisit la Miss qu'il voit gagner, et on compare le soir de l'émission.</p>
+          <p>Une party, c'est ton groupe d'amis&nbsp;: chacun choisit la Miss qu'il voit gagner, et on compare le soir de l'émission.</p>
           <Link to="/parties" className="button button--action home__cta">
             Créer ou rejoindre une party
           </Link>
@@ -103,7 +104,7 @@ export function HomePage() {
         <>
           <div className="home__party">
             <p>
-              <span className="muted">Party : </span>
+              <span className="muted">Party&nbsp;: </span>
               <strong>{party.name}</strong>
               <span className="muted">, {PHASE_LABEL[party.status].toLowerCase()}</span>
             </p>
@@ -129,6 +130,12 @@ export function HomePage() {
                   className="home__card"
                 />
               </>
+            ) : unknownPick ? (
+              <p>
+                {party.status === 'open'
+                  ? "Ton prono porte sur une candidate qui n'est plus dans l'app. Choisis-en une autre."
+                  : "Ton prono porte sur une candidate qui n'est plus dans l'app\u00a0: il ne peut pas rapporter de trophée."}
+              </p>
             ) : (
               <p>
                 {party.status === 'open'
@@ -178,7 +185,7 @@ function NextStep({
     <div className="stack">
       <p>
         {trophy
-          ? `Bravo, tu gagnes ${TROPHY_EMOJI[trophy]} ! Le trophée est sur ton profil.`
+          ? `Bravo, tu gagnes ${TROPHY_EMOJI[trophy]}\u00a0! Le trophée est sur ton profil.`
           : hasPick
             ? "C'est terminé. Pas de trophée cette fois."
             : "C'est terminé."}

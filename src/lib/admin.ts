@@ -18,7 +18,7 @@ import { db } from './firebase'
 import { requireUid, useAuth } from './auth'
 import { AppError, isPermissionDenied } from './errors'
 import { toDate, useSnapshot } from './live'
-import { generateCode, PARTY_NAME_MAX, PARTY_NAME_MIN, setActivePartyId } from './parties'
+import { expectPartyExit, generateCode, PARTY_NAME_MAX, PARTY_NAME_MIN, setActivePartyId } from './parties'
 import type { Live, Party, PartyStatus, Results } from './types'
 
 /** true si admins/{uid} existe : super admin (document créé à la main dans la console). */
@@ -117,9 +117,15 @@ export async function removeMember(partyId: string, uid: string): Promise<void> 
 export async function leaveParty(party: Party): Promise<void> {
   const uid = requireUid()
   if (party.ownerUid === uid) {
-    throw new AppError('party-invalid', "Tu es l'admin de cette party : transmets d'abord ton rôle à un autre membre.")
+    throw new AppError('party-invalid', "Tu es l'admin de cette party\u00a0: transmets d'abord ton rôle à un autre membre.")
   }
-  await deleteDoc(doc(db, 'parties', party.id, 'members', uid))
+  expectPartyExit(party.id)
+  try {
+    await deleteDoc(doc(db, 'parties', party.id, 'members', uid))
+  } catch (error) {
+    expectPartyExit(party.id, false)
+    throw error
+  }
   setActivePartyId(null)
 }
 
@@ -142,6 +148,7 @@ export async function deleteParty(party: Party, typedPhrase: string): Promise<vo
   if (!deletePhraseMatches(typedPhrase)) {
     throw new AppError('party-invalid', 'Recopie la phrase exactement pour confirmer la suppression.')
   }
+  expectPartyExit(party.id) // c'est moi qui supprime : pas de message « party supprimée »
   const members = await getDocs(collection(db, 'parties', party.id, 'members'))
   const batch = writeBatch(db)
   members.forEach((m) => batch.delete(m.ref))
@@ -210,5 +217,6 @@ export async function downloadBackup(): Promise<void> {
   a.href = url
   a.download = `pronos-miss-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`
   a.click()
-  URL.revokeObjectURL(url)
+  // Révoquer tout de suite peut annuler le téléchargement (Safari, Firefox) : on attend un peu.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }

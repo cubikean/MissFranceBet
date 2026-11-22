@@ -54,7 +54,7 @@ export function WelcomePage() {
     <main className="page welcome">
       <header className="stack">
         <h1>Bienvenue</h1>
-        <p>Choisis ton pseudo, et si tu veux une photo : c'est comme ça que tes amis te verront dans la party.</p>
+        <p>Choisis ton pseudo, et si tu veux une photo&nbsp;: c'est comme ça que tes amis te verront dans la party.</p>
       </header>
 
       <form className="stack stack--lg" onSubmit={(e) => void submit(e)} noValidate>

@@ -31,3 +31,11 @@
   justify-content: space-between;
   column-gap: var(--space-4);
 }
+
+.login__inapp {
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--color-strass);
+  border-radius: 0 var(--radius-photo) var(--radius-photo) 0;
+  background: var(--color-bg);
+  font-weight: var(--weight-semibold);
+}

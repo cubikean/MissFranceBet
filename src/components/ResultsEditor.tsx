@@ -1,9 +1,18 @@
 // Saisie des résultats pendant l'émission (admin de la party) : top 15, puis top 5, puis podium.
 // Chaque étape est un brouillon local, enregistré d'un coup quand il est complet : les joueurs ne
 // voient jamais un top 15 à moitié saisi (qui éliminerait à tort les candidates pas encore cochées).
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { errorMessage, listCandidates, missLabel, setResults, type Candidate, type Results } from '../lib'
 import { ConfirmDialog } from './ConfirmDialog'
+import {
+  clearDraft,
+  draftKey,
+  podiumDraft,
+  readDraft,
+  sessionDraftStorage,
+  subsetDraft,
+  writeDraft,
+} from './resultsDraft'
 import './ResultsEditor.css'
 
 type Step = 'top15' | 'top5' | 'podium'
@@ -57,7 +66,10 @@ export function ResultsEditor({ partyId, editionId, results, onPodiumSaved }: Re
   }
 
   // La clé remet le brouillon à zéro quand les résultats enregistrés changent.
-  const version = `${step}-${results.updatedAt?.getTime() ?? 0}`
+  const savedAt = results.updatedAt?.getTime() ?? 0
+  const version = `${step}-${savedAt}`
+  // Brouillon gardé dans sessionStorage (changement d'onglet, app tuée par iOS pendant l'annonce).
+  const draft = (s: Step) => ({ storageKey: draftKey(partyId, s), savedAt })
 
   return (
     <div className="results">
@@ -83,6 +95,7 @@ export function ResultsEditor({ partyId, editionId, results, onPodiumSaved }: Re
       {step === 'top15' && (
         <SubsetStep
           key={version}
+          {...draft('top15')}
           label="top 15"
           size={15}
           pool={candidates}
@@ -100,6 +113,7 @@ export function ResultsEditor({ partyId, editionId, results, onPodiumSaved }: Re
       {step === 'top5' && (
         <SubsetStep
           key={version}
+          {...draft('top5')}
           label="top 5"
           size={5}
           pool={pool(results.top15)}
@@ -115,6 +129,7 @@ export function ResultsEditor({ partyId, editionId, results, onPodiumSaved }: Re
       {step === 'podium' && (
         <PodiumStep
           key={version}
+          {...draft('podium')}
           pool={pool(results.top5)}
           saved={podiumOf(results)}
           onSave={async ([winner, firstRunnerUp, secondRunnerUp]) => {
@@ -186,6 +201,7 @@ function StepFooter({
   size,
   ready,
   dirty,
+  saved,
   busy,
   saveLabel,
   onSave,
@@ -194,17 +210,21 @@ function StepFooter({
   size: number
   ready: boolean
   dirty: boolean
+  /** true si cette étape a déjà été enregistrée */
+  saved: boolean
   busy: boolean
   saveLabel: string
   onSave: () => void
 }) {
+  // Rien de coché et rien d'enregistré : pas de « enregistré » trompeur.
+  const note = count === 0 && !saved ? null : dirty ? 'pas encore enregistré' : 'enregistré'
   return (
     <div className="results__bar">
       <p className="results__count" aria-live="polite">
         <strong>
           {count}/{size}
-        </strong>{' '}
-        <span className="muted">{dirty ? 'pas encore enregistré' : 'enregistré'}</span>
+        </strong>
+        {note && <span className="muted"> {note}</span>}
       </p>
       <button type="button" className="button button--action" disabled={!ready || !dirty || busy} onClick={onSave}>
         {busy ? 'Un instant…' : saveLabel}
@@ -237,14 +257,23 @@ function ClearButton({ label, saved, onClear }: { label: string; saved: boolean;
   )
 }
 
+interface DraftProps {
+  /** Clé sessionStorage du brouillon (party + étape). */
+  storageKey: string
+  /** Version des résultats serveur (updatedAt) : un brouillon commencé sur une autre est oublié. */
+  savedAt: number
+}
+
 function SubsetStep({
+  storageKey,
+  savedAt,
   label,
   size,
   pool,
   saved,
   onSave,
   onClear,
-}: {
+}: DraftProps & {
   label: string
   size: number
   pool: Candidate[]
@@ -252,10 +281,20 @@ function SubsetStep({
   onSave: (ids: string[]) => Promise<void>
   onClear: () => Promise<void>
 }) {
-  const [draft, setDraft] = useState<string[]>(() => saved ?? [])
+  const [storage] = useState(sessionDraftStorage)
+  const [draft, setDraft] = useState<string[]>(
+    () => subsetDraft(readDraft(storage, storageKey, savedAt), new Set(pool.map((c) => c.id)), size) ?? saved ?? [],
+  )
   const { busy, error, run } = useSaving()
   const full = draft.length >= size
   const dirty = !saved || saved.length !== draft.length || saved.some((id) => !draft.includes(id))
+
+  // Rien à garder tant que rien n'est coché ni enregistré.
+  const keep = dirty && (draft.length > 0 || !!saved)
+  useEffect(() => {
+    if (keep) writeDraft(storage, storageKey, savedAt, draft)
+    else clearDraft(storage, storageKey)
+  }, [storage, storageKey, savedAt, draft, keep])
 
   function toggle(id: string) {
     setDraft((d) => (d.includes(id) ? d.filter((x) => x !== id) : d.length < size ? [...d, id] : d))
@@ -292,32 +331,53 @@ function SubsetStep({
         size={size}
         ready={draft.length === size}
         dirty={dirty}
+        saved={!!saved}
         busy={busy}
         saveLabel={`Enregistrer le ${label}`}
-        onSave={() => void run(() => onSave(draft))}
+        onSave={() =>
+          void run(async () => {
+            await onSave(draft)
+            clearDraft(storage, storageKey)
+          })
+        }
       />
     </div>
   )
 }
 
 function PodiumStep({
+  storageKey,
+  savedAt,
   pool,
   saved,
   onSave,
   onClear,
-}: {
+}: DraftProps & {
   pool: Candidate[]
   saved: (string | null)[]
   onSave: (podium: [string, string, string]) => Promise<void>
   onClear: () => Promise<void>
 }) {
-  const [draft, setDraft] = useState<(string | null)[]>(() => saved)
+  const [storage] = useState(sessionDraftStorage)
+  const [draft, setDraft] = useState<(string | null)[]>(
+    () => podiumDraft(readDraft(storage, storageKey, savedAt), new Set(pool.map((c) => c.id))) ?? saved,
+  )
   // On suit l'ordre de l'annonce : 2e dauphine, puis 1re dauphine, puis Miss France.
-  const [slot, setSlot] = useState(() => Math.max(0, saved.lastIndexOf(null)))
+  const [slot, setSlot] = useState(() => Math.max(0, draft.lastIndexOf(null)))
   const { busy, error, run } = useSaving()
   const byId = new Map(pool.map((c) => [c.id, c]))
   const count = draft.filter(Boolean).length
   const dirty = draft.some((id, i) => id !== saved[i])
+  // Garde-fou : une place peut désigner une candidate absente du top 5 (données incohérentes).
+  const labelOf = (id: string | null | undefined) => {
+    const c = id ? byId.get(id) : undefined
+    return c ? missLabel(c) : 'à choisir'
+  }
+
+  useEffect(() => {
+    if (dirty) writeDraft(storage, storageKey, savedAt, draft)
+    else clearDraft(storage, storageKey)
+  }, [storage, storageKey, savedAt, draft, dirty])
 
   function nextEmpty(d: (string | null)[], from: number) {
     for (let k = 1; k <= 3; k++) {
@@ -380,9 +440,7 @@ function PodiumStep({
         })}
       </ul>
       <p className="visually-hidden" aria-live="polite">
-        {PODIUM_SLOTS.map((s, i) => `${s.label} : ${draft[i] ? missLabel(byId.get(draft[i]!)!) : 'à choisir'}`).join(
-          ', ',
-        )}
+        {PODIUM_SLOTS.map((s, i) => `${s.label}\u00a0: ${labelOf(draft[i])}`).join(', ')}
       </p>
       {error && (
         <p className="results__error" role="alert">
@@ -395,9 +453,15 @@ function PodiumStep({
         size={3}
         ready={count === 3}
         dirty={dirty}
+        saved={!!saved[0]}
         busy={busy}
         saveLabel="Enregistrer le podium"
-        onSave={() => void run(() => onSave(draft as [string, string, string]))}
+        onSave={() =>
+          void run(async () => {
+            await onSave(draft as [string, string, string])
+            clearDraft(storage, storageKey)
+          })
+        }
       />
     </div>
   )

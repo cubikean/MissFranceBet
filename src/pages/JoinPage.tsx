@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { CODE_LENGTH, errorMessage, isValidCode, joinParty, normalizeCode, setActivePartyId } from '../lib'
+import { CODE_LENGTH, codeError, errorMessage, joinParty, normalizeCode, setActivePartyId } from '../lib'
 import { clearReturnTo } from './returnTo'
 import '../styles/ui.css'
 import './JoinPage.css'
@@ -17,8 +17,9 @@ export function JoinPage() {
   async function submit(e: FormEvent) {
     e.preventDefault()
     const clean = normalizeCode(code)
-    if (!isValidCode(clean)) {
-      setError(`Le code fait ${CODE_LENGTH} caractères (lettres et chiffres). Vérifie-le auprès de l'organisateur.`)
+    const invalid = codeError(clean)
+    if (invalid) {
+      setError(invalid)
       return
     }
     setBusy(true)
@@ -64,7 +65,7 @@ export function JoinPage() {
             onChange={(e) => setCode(e.target.value.toUpperCase())}
           />
           <p id="join-code-hint" className="field__hint">
-            {CODE_LENGTH} caractères, par exemple K7QMZ3.
+            {CODE_LENGTH}&nbsp;caractères, par exemple K7QMZ3. Jamais de 0, O, 1, I ni L.
           </p>
         </div>
 

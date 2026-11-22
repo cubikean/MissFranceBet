@@ -76,6 +76,9 @@ export async function photoFromFile(file: File): Promise<string> {
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new AppError('photo-invalid', "Ton navigateur ne permet pas de préparer la photo.")
   ctx.imageSmoothingQuality = 'high'
+  // Fond blanc : une image transparente (PNG) deviendrait noire en JPEG (Safari).
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, PHOTO_SIZE, PHOTO_SIZE)
   ctx.drawImage(
     img,
     (img.naturalWidth - side) / 2,
@@ -215,5 +218,8 @@ export function useUsers(uids: readonly string[] | 'all'): Live<Record<string, U
       return () => unsubs.forEach((u) => u())
     },
     {},
+    // Un membre de plus change la clé : on garde les profils déjà lus pendant le chargement,
+    // plutôt que d'afficher un instant « Un ancien joueur » pour tout le monde.
+    { keepData: true },
   )
 }

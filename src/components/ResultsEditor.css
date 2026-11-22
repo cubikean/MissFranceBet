@@ -171,6 +171,8 @@
   background: var(--color-surface);
   color: var(--color-text);
   text-align: center;
+  /* Le nom s'adapte à la largeur de la place (voir .podium-slot__value). */
+  container-type: inline-size;
 }
 
 .podium-slot[aria-pressed='true'] {
@@ -186,7 +188,11 @@
   font-family: var(--font-display);
   font-weight: var(--weight-title);
   line-height: 1.15;
-  overflow-wrap: anywhere;
+  /* Taille réduite selon la largeur de la place : le mot le plus long (« Guadeloupe ») tient sur une
+     ligne de 360 à 430 px, et les noms se coupent aux espaces et aux tirets, jamais dans un mot.
+     Un mot plus long qu'une place (une autre année) passerait quand même à la ligne. */
+  font-size: clamp(0.75rem, 15.5cqi, 1rem);
+  overflow-wrap: break-word;
 }
 
 .podium-slot--winner .podium-slot__label::before {

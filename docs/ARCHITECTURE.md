@@ -20,6 +20,9 @@ src/
   components/AppShell.tsx  barre d'onglets du bas (+ Admin si super admin)
   components/guards.tsx    RequireAuth, RequireProfile, RequireSuperAdmin
   components/ConfirmDialog.tsx  fenêtre de confirmation partagée (<dialog> natif ; requirePhrase pour la double confirmation)
+  components/ErrorBoundary.tsx  filet global (main.tsx) : « Oups, quelque chose a planté » + Recharger ; reloadOnce()
+  components/UpdateToast.tsx    « Nouvelle version disponible » + « Mettre à jour » (monté dans App.tsx)
+  components/resultsDraft.ts    brouillon de saisie des résultats dans sessionStorage (clé party + étape)
   pages/index.tsx          pages provisoires (une par route) à remplacer
   lib/                     couche données (contrat), import depuis '../lib'
   data/editions/2027/edition.json     titre + date de l'émission
@@ -33,7 +36,7 @@ tests/rules/firestore.test.ts  tests des règles (émulateur)
 
 ## API de `src/lib` (importer depuis `src/lib/index.ts`)
 
-Tous les hooks Firestore sont temps réel (onSnapshot) et renvoient `Live<T> = { data: T; loading: boolean; error: Error | null }`. Un argument `null` = pas d'abonnement (données vides). Les dates sont des `Date` (serverTimestamp en attente : estimation locale). Éditions et candidates sont **embarquées** : fonctions synchrones, pas de hook.
+Tous les hooks Firestore sont temps réel (onSnapshot) et renvoient `Live<T> = { data: T; loading: boolean; error: Error | null }`. Un argument `null` = pas d'abonnement (données vides). Un refus des règles (permission-denied) est suivi d'un réabonnement unique après `RETRY_AFTER_DENIED_MS` (1,2 s) avant d'exposer l'erreur : il couvre les écritures locales pas encore confirmées (création, adhésion, fermeture des pronos). Les dates sont des `Date` (serverTimestamp en attente : estimation locale). Éditions et candidates sont **embarquées** : fonctions synchrones, pas de hook.
 
 Types : `Edition`, `EditionFile`, `Candidate`, `CandidatesFile`, `PartyStatus`, `Party`, `Membership`, `PartyEvent`, `Pick` (masque l'utilitaire TS `Pick<>`), `PickHistoryEntry`, `Results`, `UserProfile`, `CandidateStatus`, `Trophy`, `Live<T>`.
 
@@ -60,17 +63,18 @@ Parties (`parties.ts`)
 - `createParty(editionId, name): Promise<{ partyId; code }>` — batch party + partyCodes + mon adhésion ; réessaie si collision de code ; `AppError('party-invalid')`
 - `joinParty(code): Promise<partyId>` — `AppError('wrong-code')` ; sans effet si déjà membre ; preuve + adhésion en batch, puis suppression de la preuve
 - `useParty(partyId): Live<Party | null>` (membres et super admin)
-- `useMyParties(editionId?): Live<Party[]>`, `useMyMemberships(): Live<Membership[]>` (collection group `members` où `uid == moi`)
+- `useMyParties(editionId?): Live<Party[]>`, `useMyMemberships(): Live<Membership[]>` (collection group `members` où `uid == moi`). `useMyParties` n'est jamais en erreur à cause d'une seule party : une party perdue (adhésion retirée, party supprimée ou `status == 'deleted'`, refus des règles) sort de la liste ; il écoute aussi `members/{moi}` de chaque party, car Firestore ne réévalue pas les règles d'un écouteur déjà ouvert. Une adhésion locale pas encore confirmée attend sa confirmation avant la lecture de la party
+- `usePartyNotice(): { partyId; message } | null`, `clearPartyNotice()` — message neutre quand une party est perdue (« Tu ne fais plus partie de la party… », « La party… a été supprimée. »), affiché par AppShell ; `expectPartyExit(partyId)` (appelé par `leaveParty` et `deleteParty`) évite le message quand c'est moi qui pars
 - `useMembership(partyId): Live<Membership | null>` (moi), `useMembers(partyId): Live<Membership[]>`
 - `usePartyEvents(partyId): Live<PartyEvent[]>` (journal des phases)
 - `useAllParties(enabled): Live<Party[]>` (super admin : passer `useIsSuperAdmin().data`)
 - `useActiveParty(): Live<Party | null>` : **point d'entrée des onglets** (party active de l'édition en cours, sinon la plus récente ; null = aucune party → proposer `/parties`)
 - `useActivePartyId(): string | null`, `setActivePartyId(id | null)` (localStorage, par appareil)
 - `canManageParty(party, uid, isSuperAdmin): boolean`
-- `normalizeCode`, `isValidCode`, `generateCode`, `CODE_ALPHABET`, `CODE_LENGTH`, `PARTY_NAME_MIN/MAX`, `PARTY_STATUSES`
+- `normalizeCode`, `isValidCode`, `codeError(raw): string | null` (message prêt à afficher ; dit que 0, O, 1, I et L n'existent pas), `generateCode`, `CODE_ALPHABET`, `CODE_LENGTH`, `PARTY_NAME_MIN/MAX`, `PARTY_STATUSES`
 
 Pronos (`picks.ts`)
-- `setPick(party: Party, candidateId): Promise<{ changeCount }>` — vérifie la candidate (données embarquées), batch pick + pickHistory + members.hasPicked ; `AppError('unknown-candidate' | 'picks-closed')`
+- `setPick(party: Party, candidateId): Promise<{ changeCount }>` — vérifie la candidate (données embarquées), batch pick + pickHistory + members.hasPicked ; `AppError('unknown-candidate')`. Sur un refus, relit la party et mon prono pour dire pourquoi : `'picks-closed'`, `'not-member'` (retiré, party supprimée) ou `'pick-conflict'` (prono changé sur un autre appareil)
 - `useMyPick(partyId): Live<Pick | null>`
 - `usePicks(partyId): Live<Pick[]>` — passer `null` tant que status == 'open' (illisible par tous avant)
 - `usePickHistory(partyId, scope: 'mine' | 'all'): Live<PickHistoryEntry[]>` — 'all' : après fermeture seulement
@@ -79,6 +83,7 @@ Résultats et logique de jeu (`results.ts`, `game.ts`, `trophies.ts`)
 - `useResults(partyId): Live<Results>` (`EMPTY_RESULTS` si rien)
 - `candidateStatus(candidateId, party, results): CandidateStatus` — 'neutral' | 'inRace' | 'eliminated' | 'winner' | 'firstRunnerUp' | 'secondRunnerUp'
 - `trophyFor(pick, results): 'gold' | 'silver' | 'bronze' | null`
+- `isShowLive(showAt, now): boolean` — badge « En direct » : de `LIVE_LEAD_MS` (1 h) avant l'émission à `SHOW_DURATION_MS` (4 h) après
 - `useMyTrophies(): Live<{ party; edition; candidateId; trophy }[]>` (parties finished)
 
 Administration (`admin.ts`) — admin de la party ou super admin, sauf mention
@@ -92,6 +97,13 @@ Administration (`admin.ts`) — admin de la party ou super admin, sauf mention
 - `exportBackup(): Promise<object>`, `downloadBackup()` — super admin : fichier JSON de sauvegarde
 
 Erreurs (`errors.ts`) : `errorMessage(err): string` (français, prêt à afficher), `AppError`, `isPermissionDenied`.
+
+PWA (`pwa.ts`, sans Firebase) — branché dans `main.tsx` sur `registerSW` (`virtual:pwa-register`, `registerType: 'prompt'`)
+- `setUpdateReady(apply)`, `useUpdateReady(): boolean`, `applyUpdate()` — une nouvelle version attend ; `UpdateToast` propose « Mettre à jour »
+- `watchForUpdates(registration)` — cherche une mise à jour au retour au premier plan (`visibilitychange`) et toutes les heures (`UPDATE_CHECK_MS`) ; si une version attend au retour au premier plan, recharge seul quand `canReloadSilently({ pathname, focusedTag, dialogOpen })` (jamais sur `/soiree/gestion`, ni avec un champ actif ou une fenêtre ouverte)
+- `captureInstallPrompt()` (appelé au chargement : `beforeinstallprompt` arrive souvent avant la connexion), `useInstallPrompt(): { prompt; installed }`, `promptInstall()`
+
+Navigateur (`device.ts`) : `isInAppBrowser(userAgent)` (Instagram, Facebook, Messenger : Google y refuse l'OAuth, `/connexion` le dit), `prefersReducedMotion()`.
 
 ## Garanties des règles (firestore.rules)
 
@@ -123,7 +135,7 @@ Chaque point est couvert par `tests/rules/firestore.test.ts` (78 tests, vérifi�
 
 ## Tests
 
-- `npm run test:unit` : `src/**/*.test.ts` (fonctions pures).
+- `npm run test:unit` : `src/**/*.test.ts` (fonctions pures) ; les modules qui importent Firebase se testent avec `vi.mock('./firebase', …)` (voir `parties.test.ts`).
 - `npm run test:rules` : `firebase emulators:exec --only firestore` + vitest projet `rules` (tests/rules).
 
 ## Reste à faire
@@ -133,5 +145,6 @@ Chaque point est couvert par `tests/rules/firestore.test.ts` (78 tests, vérifi�
 - Bundle de 900 kB (Firebase) : découper par route avec `React.lazy` si besoin.
 - **Firebase App Check** : le code est prêt (`src/lib/firebase.ts`, actif si `VITE_RECAPTCHA_SITE_KEY` est fournie). Fournisseur `ReCaptchaEnterpriseProvider` (les clés v3 classiques ne se créent plus ; offre gratuite de 10 000 évaluations par mois sans facturation, compatible Spark). Reste, avant la mise en ligne, à créer la clé reCAPTCHA Enterprise (console Google Cloud > Fraud Defense, type Web, à score), à l'enregistrer dans la console et à **appliquer** App Check à Firestore. Pourquoi : un bot qui teste des codes ne peut pas en deviner un (31^6 ≈ 887 millions), mais il peut épuiser le quota gratuit de 50 000 lectures par jour.
 - Le Sash n'a été vérifié que par typecheck/build, pas visuellement dans un navigateur.
-- `useMyParties` et `useMyTrophies` ouvrent un abonnement par party : sans souci pour quelques parties par joueur.
+- `useMyParties` ouvre deux abonnements par party (la party et mon adhésion), `useMyTrophies` un : sans souci pour quelques parties par joueur.
+- Mise à jour de la PWA : passée de `autoUpdate` à `prompt` (toast « Mettre à jour »). Les appareils qui ont déjà l'ancienne version la gardent jusqu'à ce que l'app soit fermée puis rouverte (une fois) ; ensuite, le nouveau mécanisme prend le relais.
 - Tests de règles sous Windows : JDK 21 requis (firebase-tools), et lancer vitest depuis un chemin `C:\` en majuscule (sinon vitest se charge deux fois et plante sur `reading 'config'`).

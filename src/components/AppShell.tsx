@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import { NavLink, Outlet } from 'react-router'
-import { useIsSuperAdmin } from '../lib'
+import { clearPartyNotice, useIsSuperAdmin, usePartyNotice } from '../lib'
 import { InstallBanner } from './InstallBanner'
+import { Toast } from './Toast'
 import './AppShell.css'
 
 const icon = (path: ReactNode) => (
@@ -65,12 +66,16 @@ const ADMIN_TAB = {
 export function AppShell() {
   const isAdmin = useIsSuperAdmin().data
   const tabs = isAdmin ? [...TABS, ADMIN_TAB] : TABS
+  // « Tu ne fais plus partie de la party… » : l'écran est déjà passé sur une autre party.
+  const notice = usePartyNotice()
+  const clearNotice = useCallback(() => clearPartyNotice(), [])
   return (
     <div className="shell">
       <main className="shell__main" id="contenu">
         <InstallBanner />
         <Outlet />
       </main>
+      <Toast message={notice?.message ?? null} onDone={clearNotice} duration={5000} />
       <nav className="tabbar" aria-label="Navigation principale">
         <ul className="tabbar__list" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
           {tabs.map((tab) => (
