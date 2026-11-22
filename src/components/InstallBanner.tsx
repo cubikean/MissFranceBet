@@ -1,12 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { promptInstall, useInstallPrompt } from '../lib'
 import './InstallBanner.css'
 
 const DISMISS_KEY = 'pronos-miss:install-dismissed'
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
-}
 
 function isStandalone(): boolean {
   return (
@@ -39,28 +35,13 @@ function rememberDismiss() {
 }
 
 /**
- * Bandeau « Installer l'app » : prompt natif sur Android (beforeinstallprompt),
- * tuto en 3 étapes sur iOS Safari. Masqué en mode installé et une fois fermé.
+ * Bandeau « Installer l'app » : prompt natif sur Android (beforeinstallprompt, capté dès le
+ * chargement dans main.tsx), tuto en 3 étapes sur iOS Safari. Masqué en mode installé et une fois fermé.
  */
 export function InstallBanner() {
   const [hidden, setHidden] = useState(() => isStandalone() || wasDismissed())
   const [ios] = useState(isIos)
-  const [prompt, setPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-
-  useEffect(() => {
-    if (hidden) return
-    const onPrompt = (e: Event) => {
-      e.preventDefault()
-      setPrompt(e as BeforeInstallPromptEvent)
-    }
-    const onInstalled = () => setHidden(true)
-    window.addEventListener('beforeinstallprompt', onPrompt)
-    window.addEventListener('appinstalled', onInstalled)
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onPrompt)
-      window.removeEventListener('appinstalled', onInstalled)
-    }
-  }, [hidden])
+  const { prompt, installed } = useInstallPrompt()
 
   function close() {
     rememberDismiss()
@@ -68,15 +49,11 @@ export function InstallBanner() {
   }
 
   async function install() {
-    if (!prompt) return
-    await prompt.prompt()
-    const { outcome } = await prompt.userChoice
-    setPrompt(null)
-    if (outcome === 'accepted') close()
+    if ((await promptInstall()) === 'accepted') close()
   }
 
   // Ni iOS ni prompt natif disponible (desktop, Firefox…) : rien à proposer.
-  if (hidden || (!ios && !prompt)) return null
+  if (hidden || installed || (!ios && !prompt)) return null
 
   return (
     <aside className="install" aria-labelledby="install-title">
@@ -99,7 +76,7 @@ export function InstallBanner() {
               <path d="M12 3v12M8 7l4-4 4 4M6 11H5v10h14V11h-1" />
             </svg>
           </li>
-          <li>Choisis « Sur l'écran d'accueil », puis « Ajouter ».</li>
+          <li>Choisis «&nbsp;Sur l'écran d'accueil&nbsp;», puis «&nbsp;Ajouter&nbsp;».</li>
         </ol>
       ) : (
         <>

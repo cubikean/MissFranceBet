@@ -161,9 +161,9 @@ export function CandidatePage() {
                   Pour choisir, <Link to="/parties">crée ou rejoins une party</Link>.
                 </>
               ) : closed ? (
-                'Les pronos sont fermés : tu ne peux plus changer.'
+                'Les pronos sont fermés\u00a0: tu ne peux plus changer.'
               ) : (
-                `Party : ${party.name}. Tu peux changer d'avis jusqu'à la fermeture.`
+                `Party\u00a0: ${party.name}. Tu peux changer d'avis jusqu'à la fermeture.`
               )}
             </p>
           </div>

@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
-import { useCurrentParties, useIsSuperAdmin } from '../lib'
+import { clearPartyNotice, useCurrentParties, useIsSuperAdmin, usePartyNotice } from '../lib'
 import { InstallBanner } from './InstallBanner'
+import { Toast } from './Toast'
 import './AppShell.css'
 
 const icon = (path: ReactNode) => (
@@ -85,7 +86,7 @@ function ActivePartyBubble() {
     <div className="party-bubble">
       <Link to="/parties" className="party-bubble__link">
         <span className="party-bubble__dot" aria-hidden="true" />
-        <span className="party-bubble__label">Party active :</span>
+        <span className="party-bubble__label">Party active&nbsp;:</span>
         <strong className="party-bubble__name">{active.name}</strong>
         <span className="visually-hidden">, changer de party</span>
       </Link>
@@ -97,6 +98,9 @@ function ActivePartyBubble() {
 export function AppShell() {
   const isAdmin = useIsSuperAdmin().data
   const tabs = isAdmin ? [...TABS, ADMIN_TAB] : TABS
+  // « Tu ne fais plus partie de la party… » : l'écran est déjà passé sur une autre party.
+  const notice = usePartyNotice()
+  const clearNotice = useCallback(() => clearPartyNotice(), [])
   return (
     <div className="shell">
       <main className="shell__main" id="contenu">
@@ -104,6 +108,7 @@ export function AppShell() {
         <InstallBanner />
         <Outlet />
       </main>
+      <Toast message={notice?.message ?? null} onDone={clearNotice} duration={5000} tone="info" />
       <nav className="tabbar" aria-label="Navigation principale">
         <ul className="tabbar__list" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
           {tabs.map((tab) => (

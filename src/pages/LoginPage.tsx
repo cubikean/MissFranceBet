@@ -1,7 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { Sash } from '../components/Sash'
-import { errorMessage, resetPassword, signInWithEmail, signInWithGoogle, signUpWithEmail, useAuth } from '../lib'
+import {
+  errorMessage,
+  isInAppBrowser,
+  resetPassword,
+  signInWithEmail,
+  signInWithGoogle,
+  signUpWithEmail,
+  useAuth,
+} from '../lib'
 import { clearReturnTo, readReturnTo } from './returnTo'
 import '../styles/ui.css'
 import './LoginPage.css'
@@ -24,6 +32,8 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  // Lien ouvert depuis Instagram, Messenger ou Facebook : Google y refuse la connexion.
+  const [inApp] = useState(() => isInAppBrowser(navigator.userAgent))
 
   if (loading) {
     return (
@@ -81,6 +91,13 @@ export function LoginPage() {
 
       <section className="card login__card" aria-labelledby="login-title">
         <h2 id="login-title">{TITLES[mode]}</h2>
+
+        {inApp && mode !== 'reset' && (
+          <p className="login__inapp" role="note">
+            Google refuse la connexion dans le navigateur d'Instagram, de Messenger ou de Facebook. Ouvre ce lien
+            dans Safari ou Chrome, ou connecte-toi par email.
+          </p>
+        )}
 
         {mode !== 'reset' && (
           <>
@@ -172,10 +189,10 @@ export function LoginPage() {
           {mode === 'signin' && (
             <>
               <button type="button" className="link-button" onClick={() => switchMode('reset')}>
-                Mot de passe oublié ?
+                Mot de passe oublié&nbsp;?
               </button>
               <button type="button" className="link-button" onClick={() => switchMode('signup')}>
-                Pas encore de compte ? Crée-le
+                Pas encore de compte&nbsp;? Crée-le
               </button>
             </>
           )}

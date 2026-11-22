@@ -1,12 +1,10 @@
 import { Link } from 'react-router'
 import { useNow } from '../components/useNow'
-import { currentEdition, useCurrentParties, type Edition } from '../lib'
+import { currentEdition, SHOW_DURATION_MS, useCurrentParties, type Edition } from '../lib'
 import '../styles/ui.css'
 import './HomePage.css'
 
 const DAY = 24 * 60 * 60 * 1000
-/** Durée approximative de l'émission, pour afficher « En direct » pendant la soirée. */
-const SHOW_LENGTH = 4 * 60 * 60 * 1000
 
 function showDate(date: Date): string {
   const day = date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -20,7 +18,7 @@ function Countdown({ edition }: { edition: Edition }) {
   const remaining = edition.showAt.getTime() - now.getTime()
 
   if (remaining <= 0) {
-    if (-remaining < SHOW_LENGTH) return <p className="live-badge">En direct sur TF1</p>
+    if (-remaining < SHOW_DURATION_MS) return <p className="live-badge">En direct sur TF1</p>
     return <p className="muted">L'émission est passée.</p>
   }
   if (remaining >= DAY) {
@@ -63,7 +61,7 @@ const STEPS: { title: string; text: string }[] = [
   },
   {
     title: 'Vis la soirée en direct',
-    text: "Top 15, top 5, podium : tu vois si ta Miss est encore en course. 🥇 si elle est élue, 🥈 1re dauphine, 🥉 2e dauphine. Tes trophées restent sur ton profil.",
+    text: "Top 15, top 5, podium : tu vois si ta Miss est encore en course. 🥇 si elle est élue, 🥈 1re dauphine, 🥉 2e dauphine. Tes trophées restent sur ton profil.",
   },
 ]
 
@@ -87,7 +85,7 @@ export function HomePage() {
 
       <div className="stack">
         <p className="home__lead">
-          Le jeu de pronos Miss France entre amis : chacun choisit la candidate qu'il voit gagner, et on compare le soir
+          Le jeu de pronos Miss France entre amis&nbsp;: chacun choisit la candidate qu'il voit gagner, et on compare le soir
           de l'élection.
         </p>
         <Link to="/parties" className="button button--action home__cta" aria-busy={current.loading}>
@@ -110,7 +108,7 @@ export function HomePage() {
       </section>
 
       <p className="muted home__note">
-        C'est un jeu entre amis, pas le vrai vote : celui-là se passe sur TF1, par SMS et téléphone.
+        C'est un jeu entre amis, pas le vrai vote&nbsp;: celui-là se passe sur TF1, par SMS et téléphone.
       </p>
     </section>
   )

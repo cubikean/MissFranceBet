@@ -8,22 +8,32 @@
 }
 
 /*
- * Toast d'information (succès) : une notification, pas un bouton. Rayon des photos (14 px) et non
- * des boutons (999 px), fond vert très clair, pastille cochée, texte courant.
+ * Toast : une notification, pas un bouton. Rayon des photos (14 px) et non des boutons (999 px),
+ * liseré à gauche, pastille, texte courant. Deux tons : succès (vert) et information (neutre).
  */
 .toast {
+  --toast-accent: var(--color-succes);
+  --toast-bg: var(--color-succes-bg);
+  --toast-border: var(--color-succes-border);
+
   display: flex;
   align-items: center;
   gap: var(--space-3);
   width: min(100%, 26rem);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-succes-border);
-  border-left: 4px solid var(--color-succes);
+  border: 1px solid var(--toast-border);
+  border-left: 4px solid var(--toast-accent);
   border-radius: var(--radius-photo);
-  background: var(--color-succes-bg);
+  background: var(--toast-bg);
   color: var(--color-text);
   box-shadow: 0 6px 20px rgb(29 43 120 / 0.12);
   animation: toast-in var(--duration-base) var(--ease-out);
+}
+
+.toast--info {
+  --toast-accent: var(--color-echarpe);
+  --toast-bg: var(--color-surface);
+  --toast-border: var(--color-border);
 }
 
 .toast__icon {
@@ -33,11 +43,12 @@
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 50%;
-  background: var(--color-succes);
+  background: var(--toast-accent);
   color: var(--color-on-dark);
 }
 
 .toast__text {
+  flex: 1;
   overflow-wrap: anywhere;
 }
 
@@ -46,4 +57,31 @@
     opacity: 0;
     transform: translateY(12px);
   }
+}
+
+/* Toast avec une action (« Mettre à jour ») : en haut, pour ne pas croiser les toasts du bas. */
+.toast-region--top {
+  inset: calc(env(safe-area-inset-top, 0px) + var(--space-3)) var(--space-4) auto;
+  z-index: 30;
+}
+
+.toast--action {
+  padding-block: var(--space-2);
+  padding-right: var(--space-2);
+  pointer-events: auto;
+}
+
+.toast__button {
+  flex: none;
+  min-height: var(--tap-target);
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-echarpe);
+  color: var(--color-on-dark);
+  font-weight: 700;
+}
+
+.toast__button:disabled {
+  opacity: 0.7;
 }

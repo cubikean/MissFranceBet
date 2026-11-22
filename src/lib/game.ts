@@ -52,3 +52,18 @@ export function trophyFor(
 export function isEliminated(status: CandidateStatus): boolean {
   return status === 'eliminated'
 }
+
+/** Durée approximative de l'émission (pour « En direct »). */
+export const SHOW_DURATION_MS = 4 * 60 * 60 * 1000
+/** Le badge « En direct » apparaît une heure avant le début de l'émission. */
+export const LIVE_LEAD_MS = 60 * 60 * 1000
+
+/**
+ * true si l'émission est en cours ou commence dans l'heure (badge « En direct »).
+ * Faux avant (répétition, pronos fermés en avance) et après la fin de l'émission.
+ */
+export function isShowLive(showAt: Date | null | undefined, now: Date): boolean {
+  if (!showAt) return false
+  const t = now.getTime() - showAt.getTime()
+  return t >= -LIVE_LEAD_MS && t < SHOW_DURATION_MS
+}

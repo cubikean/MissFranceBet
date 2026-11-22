@@ -41,7 +41,7 @@ export function CandidatesPage() {
           </p>
         ) : mine ? (
           <p>
-            Ton prono dans « {party.name} » : <strong>{missLabel(mine)}</strong>.
+            Ton prono dans «&nbsp;{party.name}&nbsp;»&nbsp;: <strong>{missLabel(mine)}</strong>.
           </p>
         ) : party.status === 'open' ? (
           <p>Touche une candidate pour voir sa fiche et la choisir.</p>

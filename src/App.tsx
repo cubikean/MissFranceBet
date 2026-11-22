@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { AppShell } from './components/AppShell'
 import { RequireAuth, RequireSuperAdmin, RequireProfile } from './components/guards'
+import { UpdateToast } from './components/UpdateToast'
 import {
   AdminPage,
   CandidatePage,
@@ -35,6 +36,7 @@ export function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
+      <UpdateToast />
     </BrowserRouter>
   )
 }

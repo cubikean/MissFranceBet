@@ -5,13 +5,16 @@ import { Confetti } from '../components/Confetti'
 import { InviteShare } from '../components/InviteShare'
 import { PartyJournal } from '../components/PartyJournal'
 import { Sash } from '../components/Sash'
+import { useNow } from '../components/useNow'
 import { formatDateTime, PHASE_LABEL, sashVariant, statusLabel, TROPHY_EMOJI } from '../components/display'
 import {
   canManageParty,
   candidateStatus,
   errorMessage,
   getCandidate,
+  getEdition,
   hasPodium,
+  isShowLive,
   missLabel,
   trophyFor,
   useActiveParty,
@@ -33,8 +36,9 @@ import './PartyPage.css'
 
 type Users = Record<string, UserProfile>
 
-function who(users: Users, uid: string): string {
-  return users[uid]?.displayName ?? 'Un ancien joueur'
+/** Pseudo d'un joueur ; « … » tant que les profils se chargent. */
+function who(users: Users, uid: string, loading = false): string {
+  return users[uid]?.displayName ?? (loading ? '…' : 'Un ancien joueur')
 }
 
 /** Soirée de la party active : avant la fermeture, qui a joué ; après, les pronos révélés et le direct. */
@@ -43,7 +47,10 @@ export function PartyPage() {
   const isSuperAdmin = useIsSuperAdmin().data
   const active = useActiveParty()
   const party = active.data
-  const users = usePartyUsers(party?.id ?? null).data
+  const partyUsers = usePartyUsers(party?.id ?? null)
+  const users = partyUsers.data
+  const usersLoading = partyUsers.loading
+  const now = useNow(60 * 1000)
 
   if (active.loading) {
     return (
@@ -81,18 +88,21 @@ export function PartyPage() {
       aria-labelledby="soiree-title"
     >
       <header className="soiree__header">
-        {party.status === 'closed' && <p className="live-badge">En direct</p>}
+        {/* « En direct » seulement autour de l'émission : pas pendant une répétition. */}
+        {party.status === 'closed' && isShowLive(getEdition(party.editionId)?.showAt, now) && (
+          <p className="live-badge">En direct</p>
+        )}
         <h1 id="soiree-title">{party.name}</h1>
         <p className="muted">{PHASE_LABEL[party.status]}</p>
       </header>
 
       {party.status === 'open' ? (
-        <BeforeClosing party={party} users={users} />
+        <BeforeClosing party={party} users={users} usersLoading={usersLoading} />
       ) : (
-        <Revealed party={party} users={users} myUid={user?.uid ?? null} />
+        <Revealed party={party} users={users} usersLoading={usersLoading} myUid={user?.uid ?? null} />
       )}
 
-      <Journal partyId={party.id} users={users} />
+      <Journal partyId={party.id} users={users} usersLoading={usersLoading} />
 
       {canManage && (
         <Link to="/soiree/gestion" className="soiree__fab" aria-label="Gérer la party" title="Gérer la party">
@@ -116,10 +126,10 @@ export function PartyPage() {
   )
 }
 
-function BeforeClosing({ party, users }: { party: Party; users: Users }) {
+function BeforeClosing({ party, users, usersLoading }: { party: Party; users: Users; usersLoading: boolean }) {
   const members = useMembers(party.id)
   const picked = members.data.filter((m) => m.hasPicked).length
-  const sorted = [...members.data].sort((a, b) => who(users, a.uid).localeCompare(who(users, b.uid), 'fr'))
+  const sorted = [...members.data].sort((a, b) => who(users, a.uid, usersLoading).localeCompare(who(users, b.uid, usersLoading), 'fr'))
 
   return (
     <>
@@ -128,7 +138,7 @@ function BeforeClosing({ party, users }: { party: Party; users: Users }) {
           {members.loading ? 'Joueurs' : `${picked} sur ${members.data.length} ont fait leur prono`}
         </h2>
         <p className="soiree__reveal-note">
-          <strong>Qui a choisi quoi ?</strong> Réponse à la fermeture des pronos : dès que l'admin les ferme, l'écharpe de
+          <strong>Qui a choisi quoi&nbsp;?</strong> Réponse à la fermeture des pronos&nbsp;: dès que l'admin les ferme, l'écharpe de
           chacun apparaît ici, avec ses changements d'avis. D'ici là, c'est secret pour tout le monde, admin compris.
         </p>
         {members.error ? (
@@ -140,7 +150,7 @@ function BeforeClosing({ party, users }: { party: Party; users: Users }) {
             {sorted.map((m) => (
               <li key={m.uid} className="player player--compact">
                 <Avatar profile={users[m.uid]} size="sm" />
-                <span className="player__name">{who(users, m.uid)}</span>
+                <span className="player__name">{who(users, m.uid, usersLoading)}</span>
                 <span className={m.hasPicked ? 'player__done' : 'muted'}>{m.hasPicked ? 'a choisi' : 'pas encore'}</span>
               </li>
             ))}
@@ -158,7 +168,17 @@ function BeforeClosing({ party, users }: { party: Party; users: Users }) {
   )
 }
 
-function Revealed({ party, users, myUid }: { party: Party; users: Users; myUid: string | null }) {
+function Revealed({
+  party,
+  users,
+  usersLoading,
+  myUid,
+}: {
+  party: Party
+  users: Users
+  usersLoading: boolean
+  myUid: string | null
+}) {
   const members = useMembers(party.id)
   const picks = usePicks(party.id)
   const history = usePickHistory(party.id, 'all')
@@ -168,7 +188,7 @@ function Revealed({ party, users, myUid }: { party: Party; users: Users; myUid: 
   const players = picks.data
     .filter((p) => memberUids.has(p.uid))
     .map((pick) => ({ pick, candidate: getCandidate(party.editionId, pick.candidateId) }))
-    .sort((a, b) => who(users, a.pick.uid).localeCompare(who(users, b.pick.uid), 'fr'))
+    .sort((a, b) => who(users, a.pick.uid, usersLoading).localeCompare(who(users, b.pick.uid, usersLoading), 'fr'))
   const noPick = members.data.filter((m) => !picks.data.some((p) => p.uid === m.uid))
 
   const statuses = players.map((p) => candidateStatus(p.pick.candidateId, party, results))
@@ -180,6 +200,8 @@ function Revealed({ party, users, myUid }: { party: Party; users: Users; myUid: 
   const historyByUid = new Map<string, PickHistoryEntry[]>()
   for (const h of history.data) historyByUid.set(h.uid, [...(historyByUid.get(h.uid) ?? []), h])
 
+  // Pronos et membres arrivent séparément : on attend les deux avant de conclure qui n'a pas joué.
+  const loading = picks.loading || members.loading
   const error = picks.error ?? members.error
   if (error) {
     return (
@@ -191,7 +213,9 @@ function Revealed({ party, users, myUid }: { party: Party; users: Users; myUid: 
 
   return (
     <>
-      {hasPodium(results) && <Podium party={party} results={results} players={players} users={users} />}
+      {hasPodium(results) && (
+        <Podium party={party} results={results} players={players} users={users} usersLoading={usersLoading} />
+      )}
 
       <section className="stack" aria-labelledby="soiree-picks">
         <div className="soiree__picks-head">
@@ -204,7 +228,7 @@ function Revealed({ party, users, myUid }: { party: Party; users: Users; myUid: 
             </p>
           )}
         </div>
-        {picks.loading ? (
+        {loading ? (
           <p className="muted" role="status">
             Chargement…
           </p>
@@ -223,7 +247,7 @@ function Revealed({ party, users, myUid }: { party: Party; users: Users; myUid: 
                   <div className="player__row">
                     <Avatar profile={users[pick.uid]} />
                     <span className="player__name">
-                      {who(users, pick.uid)}
+                      {who(users, pick.uid, usersLoading)}
                       {pick.uid === myUid && <span className="muted"> (toi)</span>}
                     </span>
                     <Sash
@@ -265,9 +289,9 @@ function Revealed({ party, users, myUid }: { party: Party; users: Users; myUid: 
             })}
           </ul>
         )}
-        {noPick.length > 0 && (
+        {!loading && noPick.length > 0 && (
           <p className="muted">
-            Sans prono : {noPick.map((m) => who(users, m.uid)).join(', ')}.
+            Sans prono&nbsp;: {noPick.map((m) => who(users, m.uid, usersLoading)).join(', ')}.
           </p>
         )}
       </section>
@@ -286,11 +310,13 @@ function Podium({
   results,
   players,
   users,
+  usersLoading,
 }: {
   party: Party
   results: Results
   players: { pick: { uid: string; candidateId: string } }[]
   users: Users
+  usersLoading: boolean
 }) {
   const [firstSight] = useState(() => {
     const key = `pronos-miss:confetti:${party.id}`
@@ -331,7 +357,7 @@ function Podium({
               )}
               {winners.length > 0 && (
                 <span className="podium__players">
-                  {winners.map((p) => who(users, p.pick.uid)).join(', ')}
+                  {winners.map((p) => who(users, p.pick.uid, usersLoading)).join(', ')}
                 </span>
               )}
             </li>
@@ -342,7 +368,7 @@ function Podium({
   )
 }
 
-function Journal({ partyId, users }: { partyId: string; users: Users }) {
+function Journal({ partyId, users, usersLoading }: { partyId: string; users: Users; usersLoading: boolean }) {
   const events = usePartyEvents(partyId)
   // Rien à raconter (pas encore de changement de phase) : pas de bloc vide.
   if (!events.error && events.data.length === 0) return null
@@ -356,7 +382,7 @@ function Journal({ partyId, users }: { partyId: string; users: Users }) {
           {errorMessage(events.error)}
         </p>
       ) : (
-        <PartyJournal events={events.data} users={users} />
+        <PartyJournal events={events.data} users={users} usersLoading={usersLoading} />
       )}
     </section>
   )

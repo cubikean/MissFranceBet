@@ -4,7 +4,7 @@
 
 const KEY = 'pronos-miss:return-to'
 
-function isSafePath(path: unknown): path is string {
+export function isSafePath(path: unknown): path is string {
   return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') && path !== '/connexion'
 }
 

@@ -139,7 +139,8 @@ function PartyAdmin({
       },
     })
 
-  function askStatus(to: PartyStatus) {
+  // podiumSaved : passé par onPodiumSaved, dont la closure voit encore les résultats d'avant.
+  function askStatus(to: PartyStatus, podiumSaved = !!results.data.winner) {
     const texts: Record<PartyStatus, { title: string; label: string; body: ReactNode }> = {
       closed:
         party.status === 'open'
@@ -185,7 +186,7 @@ function PartyAdmin({
         body: (
           <>
             <p>
-              {results.data.winner
+              {podiumSaved
                 ? 'Les trophées sont attribués selon le podium saisi et restent sur les profils.'
                 : "Le podium n'est pas encore saisi : personne ne recevra de trophée tant qu'il ne l'est pas."}
             </p>
@@ -287,7 +288,7 @@ function PartyAdmin({
             editionId={party.editionId}
             results={results.data}
             onPodiumSaved={() => {
-              if (party.status === 'closed') askStatus('finished')
+              if (party.status === 'closed') askStatus('finished', true)
             }}
           />
         )}
@@ -349,7 +350,7 @@ function PartyAdmin({
                 <>
                   <p>
                     {name} pourra fermer les pronos, saisir les résultats et gérer les membres.
-                    {party.ownerUid === uid && !isSuperAdmin && ' Tu restes membre, sans droits d’admin.'}
+                    {party.ownerUid === uid && !isSuperAdmin && " Tu restes membre, sans droits d'admin."}
                   </p>
                   <p>{JOURNAL_NOTE}</p>
                 </>

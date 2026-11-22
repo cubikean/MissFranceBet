@@ -7,18 +7,19 @@ import { PHASE_LABEL, sashVariant, statusLabel, TROPHY_EMOJI, TROPHY_LABEL } fro
 import {
   candidateStatus,
   CODE_LENGTH,
+  codeError,
   createParty,
   currentEdition,
   errorMessage,
   getCandidate,
   getEdition,
-  isValidCode,
   joinParty,
   leaveParty,
   missLabel,
   normalizeCode,
   PARTY_NAME_MAX,
   PARTY_NAME_MIN,
+  prefersReducedMotion,
   setActivePartyId,
   trophyFor,
   useActiveParty,
@@ -58,8 +59,8 @@ export function PartiesPage() {
 
       {created && (
         <div className="card parties__created">
-          <h2 className="section-title">« {created.name} » est créée</h2>
-          <p>Envoie le lien à tes amis : avec lui, ils rejoignent ta party en un geste.</p>
+          <h2 className="section-title">«&nbsp;{created.name}&nbsp;» est créée</h2>
+          <p>Envoie le lien à tes amis&nbsp;: avec lui, ils rejoignent ta party en un geste.</p>
           <InviteShare code={created.code} partyName={created.name} />
           <Link to="/" className="button">
             Aller à l'accueil
@@ -124,7 +125,7 @@ export function PartiesPage() {
           onCreated={(c) => {
             setActivePartyId(c.partyId)
             setCreated(c)
-            window.scrollTo({ top: 0, behavior: 'smooth' })
+            window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
           }}
         />
         <JoinPartyForm onJoined={() => navigate('/')} />
@@ -151,7 +152,7 @@ export function PartiesPage() {
 
       <ConfirmDialog
         open={!!leaving}
-        title={leaving && leaving.ownerUid === user?.uid ? "Tu es l'admin de cette party" : 'Quitter la party ?'}
+        title={leaving && leaving.ownerUid === user?.uid ? "Tu es l'admin de cette party" : 'Quitter la party\u00a0?'}
         confirmLabel={leaving && leaving.ownerUid === user?.uid ? 'Aller à la gestion' : 'Quitter la party'}
         onCancel={() => setLeaving(null)}
         onConfirm={async () => {
@@ -168,13 +169,13 @@ export function PartiesPage() {
       >
         {leaving && leaving.ownerUid === user?.uid ? (
           <p>
-            Avant de quitter « {leaving.name} », transmets ton rôle d'admin à un autre membre depuis la gestion de la
+            Avant de quitter «&nbsp;{leaving.name}&nbsp;», transmets ton rôle d'admin à un autre membre depuis la gestion de la
             party.
           </p>
         ) : (
           <>
-            <p>Tu ne verras plus « {leaving?.name} » ni les pronos de ses joueurs.</p>
-            <p>Ton prono reste enregistré : si tu reviens avec le code, tu le retrouves.</p>
+            <p>Tu ne verras plus «&nbsp;{leaving?.name}&nbsp;» ni les pronos de ses joueurs.</p>
+            <p>Ton prono reste enregistré&nbsp;: si tu reviens avec le code, tu le retrouves.</p>
           </>
         )}
       </ConfirmDialog>
@@ -192,6 +193,16 @@ function PartyPick({ party }: { party: Party }) {
     return (
       <p className="muted parties__pick-empty" role="status">
         Chargement de ton prono…
+      </p>
+    )
+  }
+  if (myPick.data && !candidate) {
+    // Prono enregistré sur un id absent des données embarquées (candidate retirée, données corrigées).
+    return (
+      <p className="parties__pick-empty">
+        {party.status === 'open'
+          ? "Ton prono porte sur une candidate qui n'est plus dans l'app. Choisis-en une autre."
+          : "Ton prono porte sur une candidate qui n'est plus dans l'app : il ne peut pas rapporter de trophée."}
       </p>
     )
   }
@@ -266,7 +277,7 @@ function CreatePartyForm({
       <h2 id="create-title" className="section-title">
         Créer une party
       </h2>
-      <p className="muted">Tu en seras l'admin : c'est toi qui fermeras les pronos et saisiras les résultats.</p>
+      <p className="muted">Tu en seras l'admin&nbsp;: c'est toi qui fermeras les pronos et saisiras les résultats.</p>
       <div className="field">
         <label className="field__label" htmlFor="create-name">
           Nom de la party
@@ -301,8 +312,9 @@ function JoinPartyForm({ onJoined }: { onJoined: () => void }) {
   async function submit(e: FormEvent) {
     e.preventDefault()
     const clean = normalizeCode(code)
-    if (!isValidCode(clean)) {
-      setError(`Le code fait ${CODE_LENGTH} caractères (lettres et chiffres). Vérifie-le auprès de l'organisateur.`)
+    const invalid = codeError(clean)
+    if (invalid) {
+      setError(invalid)
       return
     }
     setBusy(true)

@@ -3,7 +3,7 @@ import { FirebaseError } from 'firebase/app'
 /** Erreur métier avec un message prêt à afficher. */
 export class AppError extends Error {
   constructor(
-    public readonly code: 'username-taken' | 'username-invalid' | 'wrong-code' | 'not-signed-in' | 'picks-closed' | 'party-invalid' | 'unknown-candidate' | 'photo-invalid',
+    public readonly code: 'username-taken' | 'username-invalid' | 'wrong-code' | 'not-signed-in' | 'picks-closed' | 'party-invalid' | 'unknown-candidate' | 'photo-invalid' | 'not-member' | 'pick-conflict',
     message: string,
   ) {
     super(message)
@@ -19,7 +19,7 @@ const MESSAGES: Record<string, string> = {
   'auth/wrong-password': 'Email ou mot de passe incorrect.',
   'auth/user-not-found': 'Aucun compte avec cet email. Crée-en un.',
   'auth/email-already-in-use': 'Un compte existe déjà avec cet email. Connecte-toi.',
-  'auth/weak-password': 'Mot de passe trop court : 6 caractères minimum.',
+  'auth/weak-password': 'Mot de passe trop court\u00a0: 6\u00a0caractères minimum.',
   'auth/too-many-requests': 'Trop de tentatives. Réessaie dans quelques minutes.',
   'auth/network-request-failed': 'Pas de connexion. Vérifie ton réseau et réessaie.',
   'auth/popup-closed-by-user': 'Connexion annulée.',

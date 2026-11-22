@@ -21,8 +21,8 @@ export function InviteShare({ code, partyName }: { code: string; partyName: stri
     if (canShare) {
       try {
         await navigator.share({
-          title: `Pronos Miss : ${partyName}`,
-          text: `Rejoins ma party « ${partyName} » pour les pronos Miss France. Code : ${code}`,
+          title: `Pronos Miss\u00a0: ${partyName}`,
+          text: `Rejoins ma party «\u00a0${partyName}\u00a0» pour les pronos Miss France. Code\u00a0: ${code}`,
           url: link,
         })
         return
@@ -35,17 +35,17 @@ export function InviteShare({ code, partyName }: { code: string; partyName: stri
       await navigator.clipboard.writeText(link)
       setFeedback('Lien copié. Colle-le dans ta conversation de groupe.')
     } catch {
-      setFeedback('Copie impossible : sélectionne le lien et copie-le à la main.')
+      setFeedback('Copie impossible\u00a0: sélectionne le lien et copie-le à la main.')
     }
   }
 
   return (
     <div className="invite">
       <p>
-        Code d'invitation : <span className="code-badge">{code}</span>
+        Code d'invitation&nbsp;: <span className="code-badge">{code}</span>
       </p>
       <p className="invite__link">
-        <span className="visually-hidden">Lien d'invitation : </span>
+        <span className="visually-hidden">Lien d'invitation&nbsp;: </span>
         {link}
       </p>
       <button type="button" className="button button--ghost" onClick={() => void share()}>

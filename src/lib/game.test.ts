@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { candidateStatus, EMPTY_RESULTS, trophyFor } from './game'
+import { candidateStatus, EMPTY_RESULTS, isShowLive, trophyFor } from './game'
 import type { Results } from './types'
 
 const open = { status: 'open' as const }
@@ -56,5 +56,24 @@ describe('trophyFor', () => {
     expect(trophyFor({ candidateId: 'c' }, null)).toBeNull()
     expect(trophyFor({ candidateId: 'c' }, withTop5)).toBeNull()
     expect(trophyFor({ candidateId: 'c' }, EMPTY_RESULTS)).toBeNull()
+  })
+})
+
+describe('isShowLive', () => {
+  const showAt = new Date('2026-12-12T21:10:00+01:00')
+  const at = (iso: string) => new Date(iso)
+
+  it('est faux bien avant l’émission (répétition, pronos fermés en avance)', () => {
+    expect(isShowLive(showAt, at('2026-11-29T21:00:00+01:00'))).toBe(false)
+    expect(isShowLive(showAt, at('2026-12-12T20:09:00+01:00'))).toBe(false)
+  })
+  it('est vrai une heure avant et pendant l’émission', () => {
+    expect(isShowLive(showAt, at('2026-12-12T20:10:00+01:00'))).toBe(true)
+    expect(isShowLive(showAt, at('2026-12-12T21:10:00+01:00'))).toBe(true)
+    expect(isShowLive(showAt, at('2026-12-13T01:09:00+01:00'))).toBe(true)
+  })
+  it('est faux après la fin, ou sans date', () => {
+    expect(isShowLive(showAt, at('2026-12-13T01:10:00+01:00'))).toBe(false)
+    expect(isShowLive(null, at('2026-12-12T21:10:00+01:00'))).toBe(false)
   })
 })

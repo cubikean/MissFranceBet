@@ -95,7 +95,7 @@ export function ConfirmDialog({
         {requirePhrase && (
           <div className="confirm__phrase">
             <label htmlFor={inputId}>
-              Pour confirmer, recopie : <strong>{requirePhrase.phrase}</strong>
+              Pour confirmer, recopie&nbsp;: <strong>{requirePhrase.phrase}</strong>
             </label>
             <input
               id={inputId}

@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' : la nouvelle version attend ; l'app propose « Mettre à jour » (ou recharge seule au
+      // retour au premier plan, hors saisie). L'enregistrement est fait dans main.tsx (virtual:pwa-register).
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'robots.txt', 'icons/apple-touch-icon-180.png'],
       manifest: {
         name: 'Pronos Miss',
@@ -28,6 +31,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,woff2,png}'],
+        // Supprime les précaches des versions précédentes à l'activation de la nouvelle.
+        cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
         // /__/ = handlers Firebase Auth (signInWithRedirect) : ne jamais les servir depuis le cache.
         navigateFallbackDenylist: [/^\/__\//],

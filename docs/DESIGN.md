@@ -21,7 +21,7 @@ Les photos officielles montrent chaque candidate avec une écharpe bleu marine o
 | Galet | `#8C93A8` | états désactivés, écharpes éliminées, texte secondaire |
 
 Argent `#A7B0BE` et bronze `#B4703A` sont réservés aux trophées 🥈 et 🥉.
-Vert succès `#1A7F45` (fond `#E8F6ED`) : uniquement la confirmation d'une action réussie, dans le toast ("Miss Bretagne choisie"). Le toast est une notification, pas un bouton : rayon 14 px, pastille cochée, texte Écharpe.
+Vert succès `#1A7F45` (fond `#E8F6ED`) : uniquement la confirmation d'une action réussie, dans le toast ("Miss Bretagne choisie"). Le toast est une notification, pas un bouton : rayon 14 px, liseré à gauche, pastille, texte Écharpe. Les messages neutres (party perdue, nouvelle version) prennent le ton « info » : fond Satin, liseré et pastille « i » Écharpe.
 Ratios de contraste vérifiés : Écharpe sur Ciel ≥ 10:1. Le blanc sur Strass ne s'utilise qu'en texte bold ≥ 16 px.
 
 ## Typographie
