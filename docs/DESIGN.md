@@ -21,6 +21,7 @@ Les photos officielles montrent chaque candidate avec une écharpe bleu marine o
 | Galet | `#8C93A8` | états désactivés, écharpes éliminées, texte secondaire |
 
 Argent `#A7B0BE` et bronze `#B4703A` sont réservés aux trophées 🥈 et 🥉.
+Vert succès `#1A7F45` (fond `#E8F6ED`) : uniquement la confirmation d'une action réussie, dans le toast ("Miss Bretagne choisie"). Le toast est une notification, pas un bouton : rayon 14 px, pastille cochée, texte Écharpe.
 Ratios de contraste vérifiés : Écharpe sur Ciel ≥ 10:1. Le blanc sur Strass ne s'utilise qu'en texte bold ≥ 16 px.
 
 ## Typographie
@@ -37,7 +38,7 @@ Les polices sont auto-hébergées avec `@fontsource`, pour que l'app fonctionne 
 - Grille des candidates : 2 colonnes de vignettes 3:4 (portraits 9:16 recadrés par le haut), avec le nom en Fraunces sous la photo et la région en petit. Aucune ombre : un bord de 1 px Écharpe à 12 % d'opacité, rayon 14 px.
 - La candidate choisie a un contour de 3 px Strass et une mini-écharpe "Mon prono" posée en diagonale sur le coin de la photo.
 - Fiche candidate : une feuille qui monte du bas, photo en pied, infos, puis un seul bouton "Choisir Miss <Région>".
-- Navigation : une barre en bas à 4 onglets (Accueil, Candidates, Soirée, Profil). Un 5e onglet "Admin" n'apparaît que pour l'admin.
+- Navigation : une barre en bas à 5 onglets (Accueil, Parties, Candidates, Soirée, Profil). Un 6e onglet "Admin" n'apparaît que pour le super admin. Dans plusieurs parties, une bulle collée en haut de l'écran (« Party active : … ») mène à /parties.
 - Le rayon est hiérarchisé : 14 px pour les photos, 999 px pour les boutons, 20 px pour les feuilles.
 
 ```

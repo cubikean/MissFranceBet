@@ -412,10 +412,19 @@ export const PARTY_STATUSES: PartyStatus[] = ['open', 'closed', 'finished']
  * C'est le point d'entrée des onglets Accueil, Candidates et Soirée.
  */
 export function useActiveParty(): Live<Party | null> {
+  const current = useCurrentParties()
+  return { data: current.data.active, loading: current.loading, error: current.error }
+}
+
+/**
+ * Mes parties de l'édition en cours et la party active parmi elles (même règle que useActiveParty).
+ * Sert à la bulle « Party active » affichée quand je suis dans plusieurs parties.
+ */
+export function useCurrentParties(): Live<{ parties: Party[]; active: Party | null }> {
   const activeId = useActivePartyId()
   const parties = useMyParties(currentEdition()?.id ?? null)
-  const party = parties.data.find((p) => p.id === activeId) ?? parties.data[0] ?? null
-  return { data: party, loading: parties.loading, error: parties.error }
+  const active = parties.data.find((p) => p.id === activeId) ?? parties.data[0] ?? null
+  return { data: { parties: parties.data, active }, loading: parties.loading, error: parties.error }
 }
 
 /**

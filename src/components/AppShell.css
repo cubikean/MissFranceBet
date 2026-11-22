@@ -45,3 +45,60 @@
 .tabbar__link:focus-visible {
   outline-offset: -4px;
 }
+
+/* Libellés serrés quand il y a 6 onglets (super admin) sur 360 px. */
+.tabbar__label {
+  max-width: 100%;
+  overflow: hidden;
+  padding-inline: 2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Bulle « Party active », collée en haut pendant le défilement. */
+.party-bubble {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  max-width: 40rem;
+  margin-inline: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + var(--space-2)) var(--space-4) var(--space-2);
+  background: linear-gradient(var(--color-bg) 70%, transparent);
+}
+
+.party-bubble__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  min-height: var(--tap-target);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.party-bubble__dot {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--color-strass);
+}
+
+.party-bubble__label {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.party-bubble__name {
+  overflow: hidden;
+  font-size: var(--text-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

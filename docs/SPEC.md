@@ -46,8 +46,8 @@ En base, une party supprimée garde le statut `deleted` (pierre tombale, voir pl
 | `/connexion` | Google + email/mot de passe, création de compte, mot de passe oublié |
 | `/bienvenue` | Onboarding : pseudo + photo facultative (une seule fois) |
 | `/rejoindre/:code?` | Saisie du code d'une party ; `/rejoindre/K7QMZ3` = lien d'invitation, code pré-rempli. Si on n'est pas connecté, on y revient après la connexion |
-| `/parties` | Mes parties de l'édition en cours (et des précédentes) : choisir la **party active**, **créer** une party (nom), **rejoindre** avec un code, **quitter** une party (popup de confirmation) |
-| `/` | Accueil : la date de l'émission, un compte à rebours, la party active, mon écharpe (mon prono), l'action suivante selon la phase. Sans party : « Crée ta party ou rejoins celle de tes amis » |
+| `/parties` | Mes parties de l'édition en cours (et des précédentes) : choisir la **party active**, **créer** une party (nom), **rejoindre** avec un code, **quitter** une party (popup de confirmation). Chaque carte montre **mon prono** dans la party (vignette, écharpe ; statut ou trophée après la fermeture) |
+| `/` | Accueil : la date de l'émission, un compte à rebours, une description du jeu (les étapes), un bouton vers `/parties` (« Voir mes parties », ou « Créer ou rejoindre une party » sans party) |
 | `/candidates` | Grille des candidates de l'édition, ma candidate (dans la party active) mise en avant, statut en course ou éliminée une fois les pronos fermés |
 | `/candidates/:id` | Fiche (photo en pied, âge, taille, origine, profession, passions, Instagram) et bouton "Choisir Miss <Région>" (désactivé si fermé ou sans party) |
 | `/soiree` | Party active. Avant la fermeture : le nombre de joueurs ayant pronostiqué (sans dire qui a choisi quoi) et le code d'invitation à partager. Après : le prono de chaque joueur sous forme d'écharpe, le statut en direct, le nombre de changements d'avis et l'historique dépliable ; puis le podium et les trophées. Le journal des phases. Bouton « Gérer la party » si j'en suis l'admin |

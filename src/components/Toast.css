@@ -7,14 +7,38 @@
   pointer-events: none;
 }
 
+/*
+ * Toast d'information (succès) : une notification, pas un bouton. Rayon des photos (14 px) et non
+ * des boutons (999 px), fond vert très clair, pastille cochée, texte courant.
+ */
 .toast {
-  max-width: 28rem;
-  padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-pill);
-  background: var(--color-echarpe);
-  color: var(--color-on-dark);
-  font-weight: var(--weight-semibold);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(100%, 26rem);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-succes-border);
+  border-left: 4px solid var(--color-succes);
+  border-radius: var(--radius-photo);
+  background: var(--color-succes-bg);
+  color: var(--color-text);
+  box-shadow: 0 6px 20px rgb(29 43 120 / 0.12);
   animation: toast-in var(--duration-base) var(--ease-out);
+}
+
+.toast__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--color-succes);
+  color: var(--color-on-dark);
+}
+
+.toast__text {
+  overflow-wrap: anywhere;
 }
 
 @keyframes toast-in {

@@ -45,3 +45,54 @@
 .parties__created .button {
   justify-self: start;
 }
+
+/* Mon prono dans la carte de la party */
+.parties__pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-photo);
+  background: var(--color-bg);
+}
+
+.parties__pick-photo {
+  flex: none;
+  width: 3rem;
+  height: 4rem;
+  border-radius: 10px;
+  object-fit: cover;
+  object-position: top;
+}
+
+.parties__pick--out .parties__pick-photo {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.parties__pick-body {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  min-width: 0;
+}
+
+.parties__pick-label,
+.parties__pick-detail {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.parties__pick-name {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-title);
+  line-height: var(--leading-title);
+  overflow-wrap: anywhere;
+}
+
+.parties__pick-empty {
+  padding: var(--space-3);
+  border-radius: var(--radius-photo);
+  background: var(--color-bg);
+}

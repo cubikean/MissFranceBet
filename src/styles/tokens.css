@@ -9,6 +9,9 @@
   --color-galet: #8c93a8; /* désactivé, éliminée, texte secondaire */
   --color-argent: #a7b0be; /* trophée 🥈 */
   --color-bronze: #b4703a; /* trophée 🥉 */
+  --color-succes: #1a7f45; /* confirmation d'une action réussie (toast) */
+  --color-succes-bg: #e8f6ed;
+  --color-succes-border: rgb(26 127 69 / 0.28);
 
   /* Dérivées */
   --color-bg: var(--color-ciel);

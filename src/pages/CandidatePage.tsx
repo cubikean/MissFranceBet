@@ -77,6 +77,10 @@ export function CandidatePage() {
   return (
     <section className="page fiche" aria-labelledby="fiche-title">
       <Link to="/candidates" className="link-button fiche__back">
+        <svg className="fiche__back-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none"
+          stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M19 12H5M11 6l-6 6 6 6" />
+        </svg>
         Retour aux candidates
       </Link>
 

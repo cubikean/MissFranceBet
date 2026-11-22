@@ -2,23 +2,30 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { InviteShare } from '../components/InviteShare'
-import { PHASE_LABEL } from '../components/display'
+import { Sash } from '../components/Sash'
+import { PHASE_LABEL, sashVariant, statusLabel, TROPHY_EMOJI, TROPHY_LABEL } from '../components/display'
 import {
+  candidateStatus,
   CODE_LENGTH,
   createParty,
   currentEdition,
   errorMessage,
+  getCandidate,
   getEdition,
   isValidCode,
   joinParty,
   leaveParty,
+  missLabel,
   normalizeCode,
   PARTY_NAME_MAX,
   PARTY_NAME_MIN,
   setActivePartyId,
+  trophyFor,
   useActiveParty,
   useAuth,
   useMyParties,
+  useMyPick,
+  useResults,
   type Party,
 } from '../lib'
 import '../styles/ui.css'
@@ -89,6 +96,7 @@ export function PartiesPage() {
                     {PHASE_LABEL[party.status]}
                     {isOwner ? ", tu en es l'admin" : ''}
                   </p>
+                  <PartyPick party={party} />
                   <div className="parties__actions">
                     {isActive ? (
                       <Link to="/" className="button">
@@ -134,6 +142,7 @@ export function PartiesPage() {
                 <p className="muted">
                   {getEdition(party.editionId)?.title ?? `Édition ${party.editionId}`}, {PHASE_LABEL[party.status].toLowerCase()}
                 </p>
+                <PartyPick party={party} />
               </li>
             ))}
           </ul>
@@ -170,6 +179,50 @@ export function PartiesPage() {
         )}
       </ConfirmDialog>
     </section>
+  )
+}
+
+/** Mon prono dans une party, pour sa carte : vignette, nom, écharpe, et statut ou trophée une fois fermée. */
+function PartyPick({ party }: { party: Party }) {
+  const myPick = useMyPick(party.id)
+  const results = useResults(party.status !== 'open' ? party.id : null).data
+  const candidate = myPick.data ? getCandidate(party.editionId, myPick.data.candidateId) : null
+
+  if (myPick.loading) {
+    return (
+      <p className="muted parties__pick-empty" role="status">
+        Chargement de ton prono…
+      </p>
+    )
+  }
+  if (!candidate) {
+    return (
+      <p className="parties__pick-empty">
+        {party.status === 'open' ? "Tu n'as pas encore choisi ta Miss." : "Tu n'as pas fait de prono dans cette party."}
+      </p>
+    )
+  }
+
+  const status = candidateStatus(candidate.id, party, results)
+  const trophy = party.status === 'finished' ? trophyFor(myPick.data, results) : null
+  const detail =
+    party.status === 'open'
+      ? "Modifiable jusqu'à la fermeture"
+      : trophy
+        ? `${TROPHY_EMOJI[trophy]} ${TROPHY_LABEL[trophy]}`
+        : statusLabel(status)
+
+  return (
+    <div className={`parties__pick${status === 'eliminated' ? ' parties__pick--out' : ''}`}>
+      <img className="parties__pick-photo" src={candidate.photo} alt="" width="48" height="64" loading="lazy" />
+      <div className="parties__pick-body">
+        <p className="parties__pick-label">Ton prono</p>
+        <p className="parties__pick-name">{candidate.name}</p>
+        <Sash region={candidate.region} variant={sashVariant(status, true)} size="sm" />
+        <span className="visually-hidden">{missLabel(candidate)}</span>
+        {detail && <p className="parties__pick-detail">{detail}</p>}
+      </div>
+    </div>
   )
 }
 

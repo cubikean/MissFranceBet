@@ -85,7 +85,7 @@ Ne remets pas ces points en question sans l'accord du porteur du projet. Ajoute 
 ## 5. Écrans
 
 `/connexion`, `/bienvenue` (onboarding), `/rejoindre/:code?` (code ou lien d'invitation), `/parties` (mes parties : choisir l'active, créer, rejoindre), `/` (accueil), `/candidates`, `/candidates/:id`, `/soiree` (live et révélation de la party active), `/soiree/gestion` (admin de la party), `/profil`, `/admin` (super admin : toutes les parties).
-On navigue avec une barre d'onglets en bas : Accueil, Candidates, Soirée, Profil, plus Admin si l'utilisateur est super admin. La gestion de la party est un bouton dans Soirée. Un bandeau d'installation PWA explique la manipulation sur iOS (Safari → Partager → "Sur l'écran d'accueil"). Le détail de chaque écran est dans SPEC.md.
+On navigue avec une barre d'onglets en bas : Accueil, Parties, Candidates, Soirée, Profil, plus Admin si l'utilisateur est super admin. Si le joueur est dans plusieurs parties cette année, une bulle en haut de l'écran rappelle la party active (celle où comptent ses pronos). La gestion de la party est un bouton dans Soirée. Un bandeau d'installation PWA explique la manipulation sur iOS (Safari → Partager → "Sur l'écran d'accueil"). Le détail de chaque écran est dans SPEC.md.
 
 ## 6. Exigences non négociables
 

@@ -17,7 +17,7 @@ src/
   styles/tokens.css        tous les tokens DESIGN.md en custom properties
   styles/base.css          reset, focus visible, reduced-motion, .button, .page, .visually-hidden
   components/Sash.tsx      l'écharpe (élément signature)
-  components/AppShell.tsx  barre d'onglets du bas (+ Admin si super admin)
+  components/AppShell.tsx  barre d'onglets du bas (+ Admin si super admin), bulle « Party active » si plusieurs parties
   components/guards.tsx    RequireAuth, RequireProfile, RequireSuperAdmin
   components/ConfirmDialog.tsx  fenêtre de confirmation partagée (<dialog> natif ; requirePhrase pour la double confirmation)
   pages/index.tsx          pages provisoires (une par route) à remplacer
@@ -67,6 +67,7 @@ Parties (`parties.ts`)
 - `usePartyEvents(partyId): Live<PartyEvent[]>` (journal des phases)
 - `useAllParties(enabled): Live<Party[]>` (super admin : passer `useIsSuperAdmin().data`) ; sans les parties supprimées
 - `useActiveParty(): Live<Party | null>` : **point d'entrée des onglets** (party active de l'édition en cours, sinon la plus récente ; null = aucune party → proposer `/parties`)
+- `useCurrentParties(): Live<{ parties: Party[]; active: Party | null }>` : mes parties de l'édition en cours et l'active (bulle de l'AppShell, accueil)
 - `useActivePartyId(): string | null`, `setActivePartyId(id | null)` (localStorage, par appareil)
 - `canManageParty(party, uid, isSuperAdmin): boolean`
 - `normalizeCode`, `isValidCode`, `generateCode`, `CODE_ALPHABET`, `CODE_LENGTH`, `PARTY_NAME_MIN/MAX`, `PARTY_STATUSES`

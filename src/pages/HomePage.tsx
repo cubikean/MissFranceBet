@@ -1,18 +1,6 @@
 import { Link } from 'react-router'
-import { CandidateCard } from '../components/CandidateCard'
 import { useNow } from '../components/useNow'
-import { PHASE_LABEL, TROPHY_EMOJI } from '../components/display'
-import {
-  candidateStatus,
-  currentEdition,
-  errorMessage,
-  getCandidate,
-  trophyFor,
-  useActiveParty,
-  useMyPick,
-  useResults,
-  type Edition,
-} from '../lib'
+import { currentEdition, useCurrentParties, type Edition } from '../lib'
 import '../styles/ui.css'
 import './HomePage.css'
 
@@ -60,16 +48,30 @@ function Countdown({ edition }: { edition: Edition }) {
   )
 }
 
+const STEPS: { title: string; text: string }[] = [
+  {
+    title: 'Crée ta party ou rejoins tes amis',
+    text: "Une party, c'est ton groupe pour la soirée. Crée la tienne et partage le code, ou entre celui qu'un ami t'a envoyé.",
+  },
+  {
+    title: 'Choisis ta Miss',
+    text: "Parcours les candidates et choisis celle que tu vois gagner. Tu peux changer d'avis jusqu'à la fermeture des pronos.",
+  },
+  {
+    title: 'Découvre les pronos des autres',
+    text: "Personne ne voit les choix des autres avant la fermeture. Ensuite, tout est révélé, changements d'avis compris.",
+  },
+  {
+    title: 'Vis la soirée en direct',
+    text: "Top 15, top 5, podium : tu vois si ta Miss est encore en course. 🥇 si elle est élue, 🥈 1re dauphine, 🥉 2e dauphine. Tes trophées restent sur ton profil.",
+  },
+]
+
+/** Accueil : la date de l'émission, ce qu'est l'app, et l'accès aux parties. */
 export function HomePage() {
   const edition = currentEdition()
-  const active = useActiveParty()
-  const party = active.data
-  const myPick = useMyPick(party?.id ?? null)
-  const results = useResults(party && party.status !== 'open' ? party.id : null)
-
-  const candidate = party && myPick.data ? getCandidate(party.editionId, myPick.data.candidateId) : null
-  const status = candidate ? candidateStatus(candidate.id, party, results.data) : 'neutral'
-  const trophy = party?.status === 'finished' ? trophyFor(myPick.data, results.data) : null
+  const current = useCurrentParties()
+  const hasParty = current.data.parties.length > 0
 
   return (
     <section className="page home stack stack--lg" aria-labelledby="home-title">
@@ -83,109 +85,33 @@ export function HomePage() {
         )}
       </header>
 
-      {active.loading ? (
-        <p className="muted" role="status">
-          Chargement…
-        </p>
-      ) : active.error ? (
-        <p className="form-error" role="alert">
-          {errorMessage(active.error)}
-        </p>
-      ) : !party ? (
-        <div className="card">
-          <h2 className="section-title">Crée ta party ou rejoins celle de tes amis</h2>
-          <p>Une party, c'est ton groupe d'amis : chacun choisit la Miss qu'il voit gagner, et on compare le soir de l'émission.</p>
-          <Link to="/parties" className="button button--action home__cta">
-            Créer ou rejoindre une party
-          </Link>
-        </div>
-      ) : (
-        <>
-          <div className="home__party">
-            <p>
-              <span className="muted">Party : </span>
-              <strong>{party.name}</strong>
-              <span className="muted">, {PHASE_LABEL[party.status].toLowerCase()}</span>
-            </p>
-            <Link to="/parties" className="link-button">
-              Changer de party
-            </Link>
-          </div>
-
-          <div className="home__pick">
-            {myPick.loading ? (
-              <p className="muted" role="status">
-                Chargement de ton prono…
-              </p>
-            ) : candidate ? (
-              <>
-                <h2 className="section-title">Ton prono</h2>
-                <CandidateCard
-                  candidate={candidate}
-                  status={status}
-                  mine
-                  showStatus={party.status !== 'open'}
-                  sash="band"
-                  className="home__card"
-                />
-              </>
-            ) : (
-              <p>
-                {party.status === 'open'
-                  ? "Tu n'as pas encore choisi. Va voir les candidates."
-                  : "Tu n'as pas fait de prono dans cette party."}
-              </p>
-            )}
-          </div>
-
-          <NextStep phase={party.status} hasPick={!!candidate} trophy={trophy} />
-        </>
-      )}
-    </section>
-  )
-}
-
-function NextStep({
-  phase,
-  hasPick,
-  trophy,
-}: {
-  phase: 'open' | 'closed' | 'finished'
-  hasPick: boolean
-  trophy: 'gold' | 'silver' | 'bronze' | null
-}) {
-  if (phase === 'open') {
-    return (
       <div className="stack">
-        {hasPick && <p>Tu peux changer d'avis jusqu'à la fermeture des pronos.</p>}
-        <Link to="/candidates" className={`button home__cta${hasPick ? '' : ' button--action'}`}>
-          Voir les candidates
+        <p className="home__lead">
+          Le jeu de pronos Miss France entre amis : chacun choisit la candidate qu'il voit gagner, et on compare le soir
+          de l'élection.
+        </p>
+        <Link to="/parties" className="button button--action home__cta" aria-busy={current.loading}>
+          {current.loading ? 'Mes parties' : hasParty ? 'Voir mes parties' : 'Créer ou rejoindre une party'}
         </Link>
       </div>
-    )
-  }
-  if (phase === 'closed') {
-    return (
-      <div className="stack">
-        <p>Les pronos sont fermés et révélés. Suis l'émission avec la party.</p>
-        <Link to="/soiree" className="button home__cta">
-          Voir la soirée
-        </Link>
-      </div>
-    )
-  }
-  return (
-    <div className="stack">
-      <p>
-        {trophy
-          ? `Bravo, tu gagnes ${TROPHY_EMOJI[trophy]} ! Le trophée est sur ton profil.`
-          : hasPick
-            ? "C'est terminé. Pas de trophée cette fois."
-            : "C'est terminé."}
+
+      <section className="stack" aria-labelledby="home-how">
+        <h2 id="home-how" className="section-title">
+          Comment ça marche
+        </h2>
+        <ol className="home__steps">
+          {STEPS.map((step) => (
+            <li key={step.title} className="home__step">
+              <h3 className="home__step-title">{step.title}</h3>
+              <p>{step.text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <p className="muted home__note">
+        C'est un jeu entre amis, pas le vrai vote : celui-là se passe sur TF1, par SMS et téléphone.
       </p>
-      <Link to="/soiree" className="button home__cta">
-        Voir le podium
-      </Link>
-    </div>
+    </section>
   )
 }
