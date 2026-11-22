@@ -98,7 +98,6 @@ export function InstallBanner() {
             <svg className="install__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 3v12M8 7l4-4 4 4M6 11H5v10h14V11h-1" />
             </svg>
-            en bas de l'écran.
           </li>
           <li>Choisis « Sur l'écran d'accueil », puis « Ajouter ».</li>
         </ol>
